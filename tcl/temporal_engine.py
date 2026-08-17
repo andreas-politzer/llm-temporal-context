@@ -14,6 +14,11 @@ LLM zur Extraktion, nur die anschließende Umrechnung in Kalenderdaten ist
 hier deterministisch. Ausdrücklich nicht abgedeckt: Aussagen mit "niemals"
 (erfordern ein Negations-/Universalitäts-Modell, nicht nur ein Intervall
 — siehe R-1-Diskussion im Chat, bewusst nicht in v0).
+
+Update 17.08.2026: DISJOINT aus TemporalRelation entfernt (siehe
+relation.py-Docstring). compare_intervals() unten war davon inhaltlich
+nicht betroffen — die Funktion hat DISJOINT nie erzeugt, nur der
+Definitions-Kommentar erwähnte es noch.
 """
 
 from __future__ import annotations
@@ -103,11 +108,12 @@ def compare_intervals(a: TemporalInterval, b: TemporalInterval) -> TemporalRelat
     Reine Intervall-Arithmetik. Keine Textinterpretation mehr an dieser
     Stelle — a und b sind bereits normalisiert.
 
-    Definitionen (final geklärt im Chat, 16.08.2026):
+    Definitionen (final geklärt im Chat, 16.08.2026, DISJOINT am
+    17.08. als strukturell unerreichbar entfernt — siehe
+    relation.py-Docstring):
       BEFORE       — a endet vor b beginnt
       AFTER        — a beginnt nach b endet
       OVERLAP      — a und b teilen einen zeitlichen Bereich
-      DISJOINT     — keine Überlappung, aber Richtung nicht bestimmbar
       UNDETERMINED — nicht genug Information für irgendeine Aussage
     """
     if a is None or b is None:

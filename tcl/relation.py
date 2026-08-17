@@ -18,11 +18,17 @@ StateRelation / resolve_state_relation() ersetzen das fachlich
 vollständig. Per grep (17.08.) bestätigt unbenutzt außerhalb dieses
 Moduls und deshalb entfernt, nicht nur deprecated.
 
-DISJOINT bleibt weiterhin ein unbenutztes Feld (siehe Session Handoff
-17.08.: "DISJOINT ist definiert, wird aber nie erzeugt"). compare_intervals()
-in temporal_engine.py erzeugt es an keiner Stelle. Das wurde in der
-heutigen Architekturrunde bewusst NICHT mitbehandelt — eigener,
-noch offener Punkt, keine Lösung hier vorweggenommen.
+Update 17.08.2026, zweiter Durchgang: DISJOINT war definiert, aber nie
+erzeugt (siehe Session Handoff 17.08.). Analyse von compare_intervals()
+in temporal_engine.py zeigt: strukturell unerreichbar, nicht nur
+zufällig unbenutzt. Alle vier Zweige der Funktion decken jede mögliche
+Kombination aus bestimmten/offenen Intervallgrenzen ab und liefern
+ausschließlich BEFORE/AFTER/OVERLAP oder UNDETERMINED — bei zwei
+konkreten Zeitpunkten ist die Reihenfolge immer eindeutig, und ein
+"definitiv getrennt, aber Reihenfolge unbekannt" kann in einem linearen,
+datumsbasierten Modell nicht auftreten (das wäre nur in einem
+zyklischen/symbolischen Zeitmodell sinnvoll, das v0 nie vorgesehen
+hatte). Deshalb entfernt, nicht nur weiterhin unbenutzt stehengelassen.
 """
 
 from __future__ import annotations
@@ -37,7 +43,6 @@ class TemporalRelation(str, Enum):
     BEFORE = "BEFORE"
     AFTER = "AFTER"
     OVERLAP = "OVERLAP"
-    DISJOINT = "DISJOINT"  # weiterhin nie erzeugt, siehe Modul-Docstring
     UNDETERMINED = "UNDETERMINED"
 
 
@@ -110,7 +115,7 @@ def resolve_state_relation(
           OVERLAP nie mehr synthetisch)
               -> CONTRADICTS, unabhängig von transition_type
 
-          sonst (BEFORE/AFTER/UNDETERMINED/DISJOINT — Engine hat keine
+          sonst (BEFORE/AFTER/UNDETERMINED — Engine hat keine
           positive Überlappungs-Evidenz):
               trägt a ODER b transition_type=TRANSITION -> SUPERSEDES
               sonst -> UNDETERMINED (keine Zeitlücken-Heuristik)
