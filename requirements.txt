@@ -1,0 +1,8 @@
+# Aktuell keine externen Abhängigkeiten — tcl/ und test_known_cases.py
+# verwenden ausschließlich die Python-Standardbibliothek
+# (datetime, dataclasses, enum, re, uuid).
+#
+# Falls dieses Projekt später an einen MCP-Server angebunden wird
+# (siehe Vault: Vault Remote Access/Setup.md für das dort verwendete
+# Pinning), hier ergänzen:
+# mcp[cli]>=1.9.0,<2.0.0
