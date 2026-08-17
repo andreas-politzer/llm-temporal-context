@@ -47,6 +47,13 @@ class TransitionType(str, Enum):
     keine Paar-Relation (die entsteht erst in Schritt 7 als state_relation,
     siehe relation.py). BARE ist der Default für eine schlichte
     Zustandsbehauptung ohne Bezug auf einen Vorzustand.
+
+    CONTINUATION ist bislang totes Feld — wie DISJOINT vor dem 17.08.
+    definiert, aber in keiner Regel (resolve_state_relation) und keinem
+    Test tatsächlich verwendet oder gebraucht. Nicht entfernt, weil noch
+    nicht geprüft, ob es strukturell unerreichbar ist (wie DISJOINT) oder
+    schlicht noch nie gebraucht wurde, weil kein Testfall es ausgelöst
+    hat. Offener Punkt, keine Lösung hier vorweggenommen.
     """
 
     BARE = "BARE"

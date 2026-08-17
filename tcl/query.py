@@ -49,8 +49,20 @@ class QueryResult:
 def resolve_current_state(store: Store, proposition_ids: List[str]) -> QueryResult:
     """
     Schritt 9. Setzt voraus, dass jede übergebene id im Store existiert
-    und assertion_time gesetzt hat (v0-Einschränkung, nicht geprüft —
-    siehe Kommentar unten).
+    und assertion_time gesetzt hat (v0-Einschränkung, nicht geprüft).
+
+    CONTINUES-Relationen zwischen last_stated und einer anderen
+    Proposition werden wie SUPERSEDES behandelt (keine offene Frage,
+    nicht genannt). Begründet, nicht nur angenommen (siehe Chat
+    17.08.): SUPERSEDES und CONTINUES sind beide Aussagen über "keine
+    offene Frage" (Zustand abgelöst bzw. bestätigt/irrelevant), im
+    Unterschied zu CONTRADICTS/UNDETERMINED, die beide "offene Frage"
+    bedeuten. Für "was gilt aktuell" (diese Funktion) ist das die
+    relevante Unterscheidung, nicht "was ist historisch passiert".
+    Geprüft an zwei Minimalfällen: echte Bestätigung desselben Werts
+    ("weiterhin Jira") und thematisch unabhängige Propositionen
+    ("Wetter war schön") landen beide korrekt bei COMPATIBLE, beide
+    ohne offene Frage für den aktuellen Zustand.
     """
     propositions = [store.get_by_id(pid) for pid in proposition_ids]
     if any(p is None for p in propositions):
