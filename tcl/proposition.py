@@ -5,6 +5,26 @@ Empirische Grundlage (Labortest 16.08.2026): ein Satz ist nicht die
 richtige Einheit; eine einzelne behauptete Proposition ist es.
 assertion_status kennt bewusst nur ASSERTED/NOT_ASSERTED — IMPLIED wurde
 in keinem Test je gebraucht und deshalb nicht aufgenommen.
+
+Update 17.08.2026 (Architecture Contract v0, Schritt 1/2; siehe
+Decisions/2026-08-17 State-Relation - Storage-Query-Trennung und
+Transition-Dominanz): zwei neue Felder.
+
+- transition_type: ob die Proposition selbst einen Zustandsbruch
+  gegenüber einem Vorzustand markiert (TRANSITION), Kontinuität betont
+  (CONTINUATION) oder schlicht einen Zustand behauptet, ohne sich zu
+  einem Vorzustand zu äußern (BARE, Default). Wird in Schritt 2
+  (Assertion Check) gesetzt, gilt für die einzelne Proposition — die
+  Bindung an eine konkrete andere Proposition (state_relation) entsteht
+  erst in Schritt 7, siehe relation.py.
+
+- decomposition_group_id: reine Provenienz. Entstehen zwei Propositionen
+  durch Splitten EINER Assertion (z.B. "war lange zuverlässig, ist es
+  aber nicht mehr" -> zwei Propositionen), tragen beide dieselbe ID.
+  Das ist KEINE Relationsbehauptung — nur ein Hinweis für Schritt 5
+  (Candidate Retrieval), diese Propositionen garantiert als Kandidaten
+  füreinander zu berücksichtigen. Ob zwischen ihnen tatsächlich eine
+  state_relation besteht, entscheidet weiterhin ausschließlich Schritt 7.
 """
 
 from __future__ import annotations
@@ -19,6 +39,19 @@ import uuid
 class AssertionStatus(str, Enum):
     ASSERTED = "ASSERTED"
     NOT_ASSERTED = "NOT_ASSERTED"
+
+
+class TransitionType(str, Enum):
+    """
+    Architecture Contract v0, Schritt 1/2. Eigenschaft EINER Proposition,
+    keine Paar-Relation (die entsteht erst in Schritt 7 als state_relation,
+    siehe relation.py). BARE ist der Default für eine schlichte
+    Zustandsbehauptung ohne Bezug auf einen Vorzustand.
+    """
+
+    BARE = "BARE"
+    CONTINUATION = "CONTINUATION"
+    TRANSITION = "TRANSITION"
 
 
 @dataclass(frozen=True)
@@ -60,6 +93,8 @@ class Proposition:
     raw_temporal_expression: Optional[str] = None
     normalized_temporal_reference: Optional[TemporalInterval] = None
     semantic_signature: Optional[SemanticSignature] = None
+    transition_type: TransitionType = TransitionType.BARE
+    decomposition_group_id: Optional[str] = None
     proposition_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __repr__(self) -> str:  # pragma: no cover - Lesbarkeit im Test-Log
@@ -67,5 +102,7 @@ class Proposition:
             f"Proposition(id={self.proposition_id[:8]}, "
             f"text={self.proposition_text!r}, "
             f"status={self.assertion_status.value}, "
+            f"transition={self.transition_type.value}, "
+            f"group={self.decomposition_group_id}, "
             f"ref={self.normalized_temporal_reference})"
         )
