@@ -18,27 +18,15 @@ This repository contains the working implementation of that idea — not a demo,
 
 ## Why Temporal Context?
 
-Large language models are good at understanding language, but temporal continuity is a different problem.
+Language models have no sense of time passing. A model reads its context top to bottom, every single turn — it has no way to tell whether the last message in that context was written five minutes ago or five years ago. Nothing marks the passage of time; the text just sits there, equally "present" no matter how stale it actually is.
 
-A model may correctly understand:
+This produces a specific, recurring failure: a model confidently treats something as still valid long after it has expired. Ask about a certification, a contract, a deadline — "yes, that's fine, it's valid until June 2026" — without registering that the conversation is actually happening in August 2026, two months past that date. The information itself wasn't wrong. The model just had no way of knowing that time had moved on since it was true.
 
-> "We use Jira."
+That is the actual problem this project set out to solve — not clever language understanding, but basic temporal grounding: knowing *when* something was said relative to *now*, whether it's still current, and being honest about the difference between "this was true," "this is still true," and "I can no longer tell."
 
-and later:
+Solving that turns out to require more than tracking timestamps. The system needs to distinguish between genuinely different situations — a stated fact being superseded by a later one, two facts genuinely contradicting each other, a change being mentioned without knowing what it replaced, or simply not having enough information to say either way. A naive implementation collapses all of these into "the newest statement wins," which quietly produces exactly the kind of false confidence described above. That is precisely what this project avoids — deliberately, and at the cost of a much slower build process, because every shortcut we tried turned out to hide a real edge case.
 
-> "We use Linear."
-
-But understanding the two sentences individually is not enough. The system needs to distinguish between fundamentally different situations:
-
-- Linear replaced Jira.
-- Jira and Linear are simultaneously claimed to be current — a real contradiction.
-- The temporal relationship cannot be determined from the available evidence.
-- A transition was explicitly stated but its predecessor is unknown.
-- Two statements refer to different time intervals and are therefore not contradictory at all.
-
-A naive implementation tends to collapse all of these into "the newest statement wins." That is precisely what this project avoids — deliberately, and at the cost of a much slower build process, because every shortcut we tried turned out to hide a real edge case.
-
-The goal is not merely to store timestamps. The goal is a persistent, model-independent temporal context layer that knows the difference between what is known, what is inferred, and what remains unresolved.
+The goal is a persistent, model-independent temporal context layer that keeps a model honestly grounded in *when* it is and what has or hasn't expired since — one that knows the difference between what is known, what is inferred, and what remains unresolved.
 
 ---
 
