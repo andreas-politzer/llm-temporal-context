@@ -37,6 +37,16 @@ def process_new_proposition(
     """
     Architecture Contract v0, Schritte 5-8 für EINE neue Proposition.
 
+    Vorbedingung: new_proposition muss assertion_status=ASSERTED haben.
+    NOT_ASSERTED-Propositionen verlassen die Pipeline bereits nach
+    Schritt 2 (Assertion Check) und dürfen diese Funktion nie erreichen
+    — kein Storage, keine Relation Resolution. Wird das verletzt, ist
+    das ein Vertragsbruch des Aufrufers, keine Situation, die hier
+    behandelt wird (kein Guard, kein stiller Early-Return — siehe Chat
+    17.08.: das würde Verantwortung aus Schritt 2 in Schritt 5
+    hineinziehen). Erzwungene Prüfung folgt erst, wenn Schritt 1-4
+    tatsächlich implementiert sind und einen echten Aufrufer haben.
+
     content_relation_fn(candidate, new_proposition) -> SemanticCompatibility
     ist von außen vorgegeben (semantische/LLM-Ebene, siehe Modul-
     Docstring) — kein Aufruf hier, keine eingebaute Heuristik.
@@ -69,6 +79,7 @@ def process_new_proposition(
                 state_relation=state_relation,
             )
         )
+        store.add_relation(relations[-1])
 
     store.add(new_proposition)
     return relations

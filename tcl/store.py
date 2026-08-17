@@ -9,53 +9,58 @@ Trennung und Transition-Dominanz, Retrieval-Addendum):
     a filtering strategy has been empirically validated to preserve
     recall.
 
-Begründung, nicht nur Bequemlichkeit: Full Retrieval garantiert Recall
-strukturell (kein Filter existiert, der einen relevanten Vorgänger
-übersehen könnte) und liefert die Baseline, gegen die jede künftige
-Filterstrategie sich messen muss ("Full Retrieval = 100% Recall").
-Kosten (LLM-Aufruf pro Kandidat in Schritt 7) sind für v0 zweitrangig
-gegenüber einer unverzerrten Referenzimplementierung.
+decomposition_group_id bleibt unter Exhaustive Retrieval automatisch
+erfüllt, ohne eigenen Codepfad. Scope: GLOBAL für v0.
 
-decomposition_group_id (proposition.py) bleibt die einzige bereits
-festgelegte Sonderregel — reine Provenienz, keine semantische
-Relevanzbehauptung. Unter Exhaustive Retrieval ist sie aktuell
-automatisch erfüllt, ohne eigenen Codepfad: jede Proposition wird
-ohnehin zurückgegeben. Das ändert sich, sobald v0 später tatsächlich
-filtert — dann MUSS diese Garantie explizit erhalten bleiben, unabhängig
-vom gewählten Filter. Hier dokumentiert, damit das nicht verloren geht.
+Update 17.08.2026, zweiter Durchgang: Store speichert jetzt auch
+PairwiseRelation-Objekte, nicht nur Propositionen. Ohne das wäre
+Schritt 9 (Query) nicht implementierbar — Query liest laut Contract
+ausschließlich bereits gespeicherte Relationen, berechnet nichts neu.
 
-Scope: GLOBAL für v0 — kein Projekt-/Nutzer-/Konversationsscoping.
-Bewusst vertagt, nicht gelöst (siehe Decision).
-
-Bewusst KEINE Persistenzmechanismus-Entscheidung — in-memory, Datei/
-SQLite/Graph-DB bleiben laut Contract offen.
+Bewusst KEINE Persistenzmechanismus-Entscheidung — weiterhin in-memory.
 """
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from .proposition import Proposition
+from .relation import PairwiseRelation
 
 
 class Store:
     def __init__(self) -> None:
         self._propositions: List[Proposition] = []
+        self._relations: List[PairwiseRelation] = []
 
     def add(self, proposition: Proposition) -> None:
         self._propositions.append(proposition)
 
-    def get_candidates(self, new_proposition: Proposition) -> List[Proposition]:
-        """
-        Schritt 5, Candidate Retrieval — v0: exhaustive, global.
+    def add_relation(self, relation: PairwiseRelation) -> None:
+        self._relations.append(relation)
 
-        Gibt jede bereits gespeicherte Proposition zurück, unabhängig
-        von semantischer oder zeitlicher Nähe zu new_proposition.
-        new_proposition selbst wird hier nicht mit zurückgegeben — sie
-        ist zum Zeitpunkt des Retrievals noch nicht gespeichert (das
-        passiert erst nach Relation Resolution in Schritt 8).
-        """
+    def get_candidates(self, new_proposition: Proposition) -> List[Proposition]:
+        """Schritt 5 — exhaustive, global. Siehe Modul-Docstring."""
         return list(self._propositions)
+
+    def get_by_id(self, proposition_id: str) -> Optional[Proposition]:
+        for p in self._propositions:
+            if p.proposition_id == proposition_id:
+                return p
+        return None
+
+    def get_relation_between(self, id_a: str, id_b: str) -> Optional[PairwiseRelation]:
+        """
+        Sucht die gespeicherte Relation zwischen zwei Propositionen,
+        unabhängig davon, welche als proposition_a_id/b_id gespeichert
+        wurde. Gibt es unter Exhaustive Retrieval nie mehr als eine
+        Relation pro Paar (jede Proposition wird nur einmal, beim
+        eigenen Einfügen, gegen den damaligen Store verglichen).
+        """
+        for r in self._relations:
+            if {r.proposition_a_id, r.proposition_b_id} == {id_a, id_b}:
+                return r
+        return None
 
     def __len__(self) -> int:
         return len(self._propositions)
