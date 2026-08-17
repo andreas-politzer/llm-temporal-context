@@ -113,3 +113,20 @@ class Proposition:
             f"group={self.decomposition_group_id}, "
             f"ref={self.normalized_temporal_reference})"
         )
+
+@dataclass(frozen=True)
+class ExtractedProposition:
+    """
+    Schritt-1-Output (Proposition Extraction) — bewusst schlanker als
+    Proposition. Enthält NUR, was Schritt 1 laut Contract entscheiden
+    darf: den Text und die Turn-Provenienz (decomposition_group_id).
+    assertion_status, transition_type, raw_temporal_expression sind
+    Aufgabe von Schritt 2/3 und werden hier NICHT geraten oder
+    vorweggenommen — dafür gibt es bewusst kein Feld. Wird erst in
+    Schritt 2 zu einer vollständigen Proposition angereichert.
+
+    Siehe Temporal Continuity/Proposition-Extraction Contract v0.
+    """
+
+    proposition_text: str
+    decomposition_group_id: str

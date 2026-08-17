@@ -6,3 +6,6 @@
 # (siehe Vault: Vault Remote Access/Setup.md für das dort verwendete
 # Pinning), hier ergänzen:
 # mcp[cli]>=1.9.0,<2.0.0
+# Für tcl/content_relation.py (Schritt 7a, echte LLM-Anbindung):
+# anthropic
+# pip install anthropic, plus ANTHROPIC_API_KEY als Umgebungsvariable
