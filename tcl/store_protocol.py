@@ -54,3 +54,12 @@ class StoreProtocol(Protocol):
 
     def get_relation_between(self, id_a: str, id_b: str) -> Optional[PairwiseRelation]:
         ...
+    
+    def get_all_propositions(self, conversation_id: str) -> list[Proposition]:
+        """
+        Alle Propositionen einer Conversation, UNABHÄNGIG vom
+        assertion_status — für Audit-Trail-Prüfungen (siehe Decision
+        2026-08-18). Anders als get_candidates() nicht auf ASSERTED
+        gefiltert.
+        """
+        ...

@@ -25,14 +25,14 @@ from typing import Callable
 
 from .proposition import Proposition
 from .relation import PairwiseRelation, SemanticCompatibility, resolve_state_relation
-from .store import InMemoryStore
+from .store_protocol import StoreProtocol
 from .temporal_engine import compare_intervals
 
 ContentRelationFn = Callable[[Proposition, Proposition], SemanticCompatibility]
 
 
 def process_new_proposition(
-    store: InMemoryStore,
+    store: StoreProtocol,
     conversation_id: str,
     turn_id: str,
     new_proposition: Proposition,

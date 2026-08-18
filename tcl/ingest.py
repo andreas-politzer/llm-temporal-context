@@ -19,14 +19,14 @@ from .content_relation import content_relation_fn as default_content_relation_fn
 from .pipeline import ContentRelationFn, process_new_proposition
 from .proposition import AssertionStatus
 from .relation import PairwiseRelation
-from .store import InMemoryStore
+from .store_protocol import StoreProtocol
 from .turn_processor import process_turn
 
 
 def ingest_turn(
     turn_text: str,
     assertion_time: datetime,
-    store: InMemoryStore,
+    store: StoreProtocol,
     conversation_id: str,
     content_relation_fn: ContentRelationFn = default_content_relation_fn,
 ) -> list[PairwiseRelation]:

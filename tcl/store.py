@@ -61,6 +61,10 @@ class InMemoryStore:
             if self._propositions[pid].assertion_status == AssertionStatus.ASSERTED
         ]
 
+    def get_all_propositions(self, conversation_id: str) -> list[Proposition]:
+        ids_in_scope = self._propositions_by_conversation.get(conversation_id, [])
+        return [self._propositions[pid] for pid in ids_in_scope]
+
     def get_by_id(self, proposition_id: str) -> Optional[Proposition]:
         return self._propositions.get(proposition_id)
 

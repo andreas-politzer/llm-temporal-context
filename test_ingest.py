@@ -1,15 +1,16 @@
 """
-End-to-End-Test für ingest_turn: Rohtext -> Store -> Query, in einem
-durchgängigen Fluss. Update 18.08.: nutzt InMemoryStore mit
-conversation_id-Scoping und Audit-Trail-Persistierung von NOT_ASSERTED-
-Propositionen (Decision: Persistenz-Architektur).
+End-to-End-Test für ingest_turn gegen PostgresStore. Nutzt ausschließlich
+öffentliche StoreProtocol-Methoden (get_all_propositions, get_candidates,
+get_relation_between) - keine internen Attribute, damit der Test für
+InMemoryStore UND PostgresStore identisch funktioniert.
 """
 
 from datetime import datetime
 
 from tcl.ingest import ingest_turn
+from tcl.postgres_store import PostgresStore
+from tcl.proposition import AssertionStatus
 from tcl.query import resolve_current_state, format_answer
-from tcl.store import InMemoryStore
 
 
 def check(name: str, got, expected) -> None:
@@ -20,45 +21,47 @@ def check(name: str, got, expected) -> None:
 
 
 def main() -> None:
-    print("=== Voller Fluss, Fall 1: Jira -> Linear, SUPERSEDES, Query beantwortet korrekt ===")
-    store = InMemoryStore()
+    print("=== Voller Fluss, Fall 1: Anbieterwechsel, SUPERSEDES ===")
+    store = PostgresStore()
     conv = store.add_conversation()
-    ingest_turn("Wir nutzen aktuell Jira.", datetime(2026, 8, 10, 10, 0), store, conv)
-    ingest_turn("Seit Dienstag nutzen wir Linear.", datetime(2026, 8, 13, 15, 0), store, conv)
+    ingest_turn("Wir arbeiten aktuell mit Anbieter A.", datetime(2026, 8, 10, 10, 0), store, conv)
+    ingest_turn("Seit Dienstag arbeiten wir mit Anbieter B.", datetime(2026, 8, 13, 15, 0), store, conv)
 
-    check("Fall 1: Store enthält beide Propositionen", len(store), 2)
-    ids = store._propositions_by_conversation[conv]  # nur zu Testzwecken direkter Zugriff
+    props = store.get_all_propositions(conv)
+    check("Fall 1: 2 Propositionen in dieser Conversation", len(props), 2)
+    ids = [p.proposition_id for p in props]
     result = resolve_current_state(store, ids)
     check("Fall 1: eindeutig aufgelöst", result.resolved, True)
     print("  ->", format_answer(result))
 
-    print("\n=== Voller Fluss, Konditional wird gespeichert, aber ohne Relationen (NEU seit 18.08.) ===")
-    store2 = InMemoryStore()
-    conv2 = store2.add_conversation()
-    ingest_turn("Wenn das Budget reicht, wechseln wir zu Linear.", datetime(2026, 8, 17, 9, 0), store2, conv2)
-    check("Konditional: 2 Propositionen gespeichert (Audit-Trail), keine Relationen", len(store2), 2)
-    check("Konditional: keine Relationen entstanden", len(store2._relations), 0)
+    print("\n=== Voller Fluss, Konditional: gespeichert, aber kein Candidate ===")
+    conv2 = store.add_conversation()
+    ingest_turn("Wenn der neue Vertrag unterschrieben wird, wechseln wir zu Anbieter C.", datetime(2026, 8, 17, 9, 0), store, conv2)
+    props2 = store.get_all_propositions(conv2)
+    check("Konditional: 2 Propositionen gespeichert (Audit-Trail)", len(props2), 2)
+    check("Konditional: beide NOT_ASSERTED", all(p.assertion_status == AssertionStatus.NOT_ASSERTED for p in props2), True)
+    check("Konditional: kein einziger ASSERTED-Candidate", len(store.get_candidates(conv2, None)), 0)
 
-    print("\n=== Voller Fluss, gemischter Turn: eine ASSERTED, eine NOT_ASSERTED-Proposition ===")
-    store3 = InMemoryStore()
-    conv3 = store3.add_conversation()
+    print("\n=== Voller Fluss, gemischter Turn: eine ASSERTED, zwei NOT_ASSERTED ===")
+    conv3 = store.add_conversation()
     ingest_turn(
-        "Wir nutzen Jira. Wenn das Budget reicht, wechseln wir zu Linear.",
-        datetime(2026, 8, 17, 9, 0),
-        store3,
-        conv3,
+        "Wir arbeiten mit Anbieter A. Wenn der neue Vertrag unterschrieben wird, wechseln wir zu Anbieter C.",
+        datetime(2026, 8, 17, 9, 0), store, conv3,
     )
-    check("Gemischt: alle 3 Propositionen gespeichert (1 ASSERTED + 2 NOT_ASSERTED)", len(store3), 3)
-    check("Gemischt: nur 0 Relationen (nur 1 ASSERTED, kein Vergleichspartner)", len(store3._relations), 0)
+    props3 = store.get_all_propositions(conv3)
+    check("Gemischt: 3 Propositionen gespeichert", len(props3), 3)
+    check("Gemischt: genau 1 davon ASSERTED (Candidate)", len(store.get_candidates(conv3, None)), 1)
 
-    print("\n=== Scope-Test (NEU): zwei Conversations bleiben getrennt ===")
-    store4 = InMemoryStore()
-    conv_a = store4.add_conversation()
-    conv_b = store4.add_conversation()
-    ingest_turn("Wir nutzen aktuell Jira.", datetime(2026, 8, 10, 10, 0), store4, conv_a)
-    ingest_turn("Wir nutzen aktuell Linear.", datetime(2026, 8, 10, 10, 0), store4, conv_b)
-    check("Scope: insgesamt 2 Propositionen im Store", len(store4), 2)
-    check("Scope: KEINE Relation zwischen den zwei Conversations", len(store4._relations), 0)
+    print("\n=== Scope-Test: zwei Conversations bleiben getrennt ===")
+    conv_a = store.add_conversation()
+    conv_b = store.add_conversation()
+    ingest_turn("Wir arbeiten aktuell mit Anbieter A.", datetime(2026, 8, 10, 10, 0), store, conv_a)
+    ingest_turn("Wir arbeiten aktuell mit Anbieter B.", datetime(2026, 8, 10, 10, 0), store, conv_b)
+    check("Scope: Conversation A hat genau 1 Proposition", len(store.get_all_propositions(conv_a)), 1)
+    check("Scope: Conversation B hat genau 1 Proposition", len(store.get_all_propositions(conv_b)), 1)
+    id_a = store.get_all_propositions(conv_a)[0].proposition_id
+    id_b = store.get_all_propositions(conv_b)[0].proposition_id
+    check("Scope: KEINE Relation zwischen den zwei Conversations", store.get_relation_between(id_a, id_b), None)
 
     print("\nAlle Checks bestanden.")
 
