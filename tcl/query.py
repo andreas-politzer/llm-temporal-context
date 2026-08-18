@@ -1,22 +1,33 @@
 """
 Query / Current-State Resolution — Architecture Contract v0, Schritt 9.
 
-Update 18.08.: Missing-Time-Handling vollständig durchdacht (siehe
-Decision Persistenz-Architektur). Kein stiller Fallback auf "aktuell"
-bei fehlendem assertion_time - das wäre genau die falsche Sicherheit,
-die dieser Layer verhindern soll. Stattdessen: bereits gespeicherte
-Relationen (auch über TRANSITION-Dominanz bei fehlendem Zeitbezug,
-siehe Case C in test_known_cases.py) werden genutzt, wo vorhanden.
-Nur wenn WEDER Zeitbezug NOCH eine gespeicherte Relation existiert,
-wird das Ergebnis ehrlich als nicht auflösbar markiert - kein Crash,
-kein Raten.
+Update 18.08. (Lifecycle-Decay Contract): resolve_current_state bekommt
+jetzt einen optionalen query_time-Parameter (Abfragezeitpunkt, externes
+Kontext-Metadatum wie assertion_time - NICHT vom LLM erzeugt). Damit
+kann eine Proposition mit bekanntem, überschrittenem Gültigkeitsende
+(normalized_temporal_reference.end < query_time) als verfallen erkannt
+werden, auch wenn nie eine neue Proposition sie explizit abgelöst hat -
+der ursprüngliche Motivationsfall des Projekts (Zertifikat "gültig bis
+Juni 2026", abgefragt im August). Offene Intervalle (kein Ende gesetzt)
+verfallen NIE von selbst - nur SUPERSEDES kann sie ablösen.
+
+Kein Raten in beide Richtungen: eine verfallene, nicht abgelöste
+Proposition führt zu resolved=False mit explizitem Decay-Grund, nicht
+zu einer stillschweigenden "gilt noch"-Antwort und auch nicht zu einer
+erfundenen "gilt nicht mehr"-Aussage.
+
+query_time ist optional (Default None) - ohne query_time wird KEIN
+Decay geprüft, Verhalten bleibt wie vor dem 18.08. (Rückwärtskompatibilität
+mit bestehenden Tests, die query_time nicht kennen).
 
 Negative Verantwortung (unverändert): bewertet oder überschreibt KEINE
 Relationen, liest ausschließlich, was Schritt 6/7 bereits abgelegt haben.
+Decay-Prüfung ist rein deterministisch (Datumsvergleich), kein LLM.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -31,10 +42,22 @@ class QueryResult:
     contradicts: List[Proposition] = field(default_factory=list)
     unclear: List[Proposition] = field(default_factory=list)
     temporally_unanchored: List[Proposition] = field(default_factory=list)
+    decayed: List[Proposition] = field(default_factory=list)
     reason: Optional[str] = None
 
 
-def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
+def _is_decayed(proposition: Proposition, query_time: Optional[datetime]) -> bool:
+    if query_time is None:
+        return False
+    ref = proposition.normalized_temporal_reference
+    if ref is None or ref.end is None:
+        return False  # offenes Intervall verfällt nie von selbst
+    return ref.end < query_time
+
+
+def resolve_current_state(
+    store, proposition_ids: List[str], query_time: Optional[datetime] = None
+) -> QueryResult:
     propositions = [store.get_by_id(pid) for pid in proposition_ids]
     if any(p is None for p in propositions):
         raise ValueError("Eine übergebene proposition_id existiert nicht im Store")
@@ -51,27 +74,16 @@ def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
 
     last_stated = max(anchored, key=lambda p: p.assertion_time)
 
-    # Prüfen, ob der gewählte last_stated-Kandidat bereits von einer ANDEREN
-    # Proposition supersedet wurde (auch einer zeitlich unverankerten) -
-    # sonst würde eine bereits bekannte Ablösung ignoriert, nur weil ihr
-    # Zeitpunkt unbekannt ist. Siehe Fund 18.08.
     for candidate in propositions:
         if candidate.proposition_id == last_stated.proposition_id:
             continue
         rel = store.get_relation_between(last_stated.proposition_id, candidate.proposition_id)
-        # Richtung prüfen: last_stated wurde nur dann abgelöst, wenn last_stated
-        # die ÄLTERE Seite ist (proposition_a) und candidate sie supersedet (b).
-        # Andersrum (last_stated supersedet candidate) ist genau das erwartete,
-        # korrekte Ergebnis, kein Problem.
         was_superseded = (
             rel is not None
             and rel.state_relation == StateRelation.SUPERSEDES
             and rel.proposition_a_id == last_stated.proposition_id
         )
         if was_superseded:
-            # last_stated wurde nachweislich abgelöst - kann nicht als
-            # "zuletzt behauptet" gelten, auch wenn die Ablöse-Proposition
-            # selbst keinen bekannten Zeitpunkt hat.
             return QueryResult(
                 resolved=False,
                 temporally_unanchored=[p for p in propositions if p.assertion_time is None],
@@ -82,12 +94,24 @@ def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
                 ),
             )
 
+    # Decay-Prüfung: last_stated selbst könnte trotz "zeitlich letzte
+    # Behauptung" bereits über sein bekanntes Gültigkeitsende hinaus sein.
+    if _is_decayed(last_stated, query_time):
+        return QueryResult(
+            resolved=False,
+            last_stated=last_stated,
+            reason=(
+                f'Letzter bekannter Stand: "{last_stated.proposition_text}" — das bekannte '
+                f'Gültigkeitsende liegt vor dem Abfragezeitpunkt. Kein neuerer Stand bekannt.'
+            ),
+        )
+
     others = [p for p in propositions if p.proposition_id != last_stated.proposition_id]
 
     contradicts: List[Proposition] = []
     unclear: List[Proposition] = []
     unresolved: List[Proposition] = []
-    anchored_gap = []
+    anchored_gap: List[Proposition] = []
 
     for other in others:
         relation = store.get_relation_between(last_stated.proposition_id, other.proposition_id)
@@ -102,14 +126,9 @@ def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
             contradicts.append(other)
         elif relation.state_relation == StateRelation.UNDETERMINED:
             unclear.append(other)
-        # SUPERSEDES und CONTINUES: keine offene Frage
-
-        if other.assertion_time is None:
-            # informativ, unabhängig vom Relationsergebnis: Zeitpunkt bleibt unbekannt
-            unclear_or_contradicts = other in contradicts or other in unclear
-            pass  # wird unten gesammelt
 
     temporally_unanchored = [p for p in others if p.assertion_time is None]
+    decayed = [p for p in others if _is_decayed(p, query_time)]
 
     if anchored_gap:
         ids = ", ".join(p.proposition_id for p in anchored_gap)
@@ -129,6 +148,7 @@ def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
             contradicts=contradicts,
             unclear=unclear,
             temporally_unanchored=temporally_unanchored,
+            decayed=decayed,
             reason=(
                 f"Mindestens eine Proposition ohne bekannten Zeitpunkt konnte nicht "
                 f"eingeordnet werden, da keine Relation zu ihr vorliegt: {names}"
@@ -142,6 +162,7 @@ def resolve_current_state(store, proposition_ids: List[str]) -> QueryResult:
         contradicts=contradicts,
         unclear=unclear,
         temporally_unanchored=temporally_unanchored,
+        decayed=decayed,
     )
 
 
@@ -149,7 +170,12 @@ def format_answer(result: QueryResult) -> str:
     if not result.resolved and result.last_stated is None:
         return f"Nicht auflösbar: {result.reason}"
 
-    if result.resolved and not result.temporally_unanchored:
+    if not result.resolved and result.reason and not result.contradicts and not result.unclear:
+        # Deckt Decay- und Supersede-durch-unverankert-Fälle ab: reason
+        # trägt hier bereits die vollständige Aussage.
+        return result.reason
+
+    if result.resolved and not result.temporally_unanchored and not result.decayed:
         return f"Zuletzt behaupteter Stand: {result.last_stated.proposition_text}"
 
     parts = [f"Zuletzt behaupteter Stand: {result.last_stated.proposition_text}."]
@@ -162,6 +188,9 @@ def format_answer(result: QueryResult) -> str:
     if result.temporally_unanchored:
         named = ", ".join(p.proposition_text for p in result.temporally_unanchored)
         parts.append(f"Zeitpunkt unbekannt bei: {named}.")
+    if result.decayed:
+        named = ", ".join(p.proposition_text for p in result.decayed)
+        parts.append(f"Bereits abgelaufen (informativ): {named}.")
     if result.reason:
         parts.append(result.reason)
     return " ".join(parts)
