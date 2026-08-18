@@ -49,10 +49,7 @@ the most recent thing in the context while referring to something that is
 already obsolete in the real world.
 
 The goal is therefore not clever date parsing. The goal is a persistent,
-model-independent temporal context layer that gives a model an explicit
-representation of the passage of time and the temporal validity of information,
-so that information retrieved or remembered from the past is not automatically
-treated as current.
+model-independent temporal context layer.
 
 Temporal validity is one important part of that problem. Temporal memory,
 continuity, projection, and planning are related but distinct capabilities.
