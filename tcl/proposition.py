@@ -102,6 +102,7 @@ class Proposition:
     semantic_signature: Optional[SemanticSignature] = None
     transition_type: TransitionType = TransitionType.BARE
     decomposition_group_id: Optional[str] = None
+    turn_id: Optional[str] = None
     proposition_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __repr__(self) -> str:  # pragma: no cover - Lesbarkeit im Test-Log
@@ -130,3 +131,25 @@ class ExtractedProposition:
 
     proposition_text: str
     decomposition_group_id: str
+
+@dataclass(frozen=True)
+class Conversation:
+    """Scope-Grenze für Retrieval, siehe Decision 2026-08-18."""
+
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+@dataclass(frozen=True)
+class Turn:
+    """
+    Wird IMMER persistiert, unabhängig davon, ob daraus ASSERTED-
+    Propositionen entstehen (Audit-Trail-Prinzip, Decision 2026-08-18).
+    assertion_time ist hier verortet, nicht mehr primär auf Proposition -
+    alle Propositionen eines Turns teilen denselben Wert.
+    """
+
+    conversation_id: str
+    text: str
+    assertion_time: datetime
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    inserted_at: datetime = field(default_factory=datetime.now)

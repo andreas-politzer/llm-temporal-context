@@ -35,7 +35,7 @@ from typing import List
 
 from .proposition import Proposition
 from .relation import StateRelation
-from .store import Store
+from .store import InMemoryStore
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ class QueryResult:
     unclear: List[Proposition] = field(default_factory=list)
 
 
-def resolve_current_state(store: Store, proposition_ids: List[str]) -> QueryResult:
+def resolve_current_state(store: InMemoryStore, proposition_ids: List[str]) -> QueryResult:
     """
     Schritt 9. Setzt voraus, dass jede übergebene id im Store existiert
     und assertion_time gesetzt hat (v0-Einschränkung, nicht geprüft).

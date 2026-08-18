@@ -1,62 +1,70 @@
 """
-Persistent Store — Architecture Contract v0, Schritt 5/8.
+InMemoryStore — erfüllt StoreProtocol (siehe tcl/store_protocol.py).
+Keine Übergangslösung, dauerhafte Testimplementierung desselben
+Contracts wie ein künftiger PostgresStore (Decision 2026-08-18).
 
-v0-Prinzip (siehe Decisions/2026-08-17 State-Relation - Storage-Query-
-Trennung und Transition-Dominanz, Retrieval-Addendum):
-
-    Candidate Retrieval is exhaustive by default. No semantic or
-    temporal filtering is applied across independent assertions until
-    a filtering strategy has been empirically validated to preserve
-    recall.
-
-decomposition_group_id bleibt unter Exhaustive Retrieval automatisch
-erfüllt, ohne eigenen Codepfad. Scope: GLOBAL für v0.
-
-Update 17.08.2026, zweiter Durchgang: Store speichert jetzt auch
-PairwiseRelation-Objekte, nicht nur Propositionen. Ohne das wäre
-Schritt 9 (Query) nicht implementierbar — Query liest laut Contract
-ausschließlich bereits gespeicherte Relationen, berechnet nichts neu.
-
-Bewusst KEINE Persistenzmechanismus-Entscheidung — weiterhin in-memory.
+v0-Prinzip weiterhin gültig: Exhaustive Retrieval, aber jetzt
+scope-gebunden (nur innerhalb derselben conversation_id) statt global -
+löst das O(n²)-Skalierungsproblem strukturell.
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+from datetime import datetime
+from typing import Optional
+from uuid import uuid4
 
-from .proposition import Proposition
+from .proposition import AssertionStatus, Conversation, Proposition, Turn
 from .relation import PairwiseRelation
 
 
-class Store:
+class InMemoryStore:
     def __init__(self) -> None:
-        self._propositions: List[Proposition] = []
-        self._relations: List[PairwiseRelation] = []
+        self._conversations: dict[str, Conversation] = {}
+        self._turns: dict[str, Turn] = {}
+        self._propositions: dict[str, Proposition] = {}
+        self._relations: list[PairwiseRelation] = []
+        # Hilfsindex: welche proposition_ids gehören zu welcher conversation_id
+        self._propositions_by_conversation: dict[str, list[str]] = {}
+        self._conversation_by_turn: dict[str, str] = {}
 
-    def add(self, proposition: Proposition) -> None:
-        self._propositions.append(proposition)
+    def add_conversation(self) -> str:
+        conv = Conversation()
+        self._conversations[conv.id] = conv
+        self._propositions_by_conversation[conv.id] = []
+        return conv.id
 
-    def add_relation(self, relation: PairwiseRelation) -> None:
-        self._relations.append(relation)
+    def add_turn(self, conversation_id: str, text: str, assertion_time: datetime) -> str:
+        turn = Turn(conversation_id=conversation_id, text=text, assertion_time=assertion_time)
+        self._turns[turn.id] = turn
+        self._conversation_by_turn[turn.id] = conversation_id
+        return turn.id
 
-    def get_candidates(self, new_proposition: Proposition) -> List[Proposition]:
-        """Schritt 5 — exhaustive, global. Siehe Modul-Docstring."""
-        return list(self._propositions)
+    def ingest_propositions(
+        self,
+        turn_id: str,
+        propositions: list[Proposition],
+        relations: list[PairwiseRelation],
+    ) -> None:
+        conversation_id = self._conversation_by_turn[turn_id]
+        for proposition in propositions:
+            self._propositions[proposition.proposition_id] = proposition
+            self._propositions_by_conversation[conversation_id].append(proposition.proposition_id)
+        for relation in relations:
+            self._relations.append(relation)
+
+    def get_candidates(self, conversation_id: str, new_proposition: Proposition) -> list[Proposition]:
+        ids_in_scope = self._propositions_by_conversation.get(conversation_id, [])
+        return [
+            self._propositions[pid]
+            for pid in ids_in_scope
+            if self._propositions[pid].assertion_status == AssertionStatus.ASSERTED
+        ]
 
     def get_by_id(self, proposition_id: str) -> Optional[Proposition]:
-        for p in self._propositions:
-            if p.proposition_id == proposition_id:
-                return p
-        return None
+        return self._propositions.get(proposition_id)
 
     def get_relation_between(self, id_a: str, id_b: str) -> Optional[PairwiseRelation]:
-        """
-        Sucht die gespeicherte Relation zwischen zwei Propositionen,
-        unabhängig davon, welche als proposition_a_id/b_id gespeichert
-        wurde. Gibt es unter Exhaustive Retrieval nie mehr als eine
-        Relation pro Paar (jede Proposition wird nur einmal, beim
-        eigenen Einfügen, gegen den damaligen Store verglichen).
-        """
         for r in self._relations:
             if {r.proposition_a_id, r.proposition_b_id} == {id_a, id_b}:
                 return r
