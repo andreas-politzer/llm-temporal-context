@@ -34,6 +34,12 @@ from typing import List, Optional
 from .proposition import Proposition
 from .relation import StateRelation
 
+_MONTHS_DE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+
+
+def _format_month_year(dt: datetime) -> str:
+    return f"{_MONTHS_DE[dt.month - 1]} {dt.year}"
+
 
 @dataclass(frozen=True)
 class QueryResult:
@@ -97,12 +103,15 @@ def resolve_current_state(
     # Decay-Prüfung: last_stated selbst könnte trotz "zeitlich letzte
     # Behauptung" bereits über sein bekanntes Gültigkeitsende hinaus sein.
     if _is_decayed(last_stated, query_time):
+        end = last_stated.normalized_temporal_reference.end
         return QueryResult(
             resolved=False,
             last_stated=last_stated,
             reason=(
-                f'Letzter bekannter Stand: "{last_stated.proposition_text}" — das bekannte '
-                f'Gültigkeitsende liegt vor dem Abfragezeitpunkt. Kein neuerer Stand bekannt.'
+                f'Die bekannte Gültigkeit ist abgelaufen: Zuletzt bekannter Stand war '
+                f'"{last_stated.proposition_text}" (gültig bis {_format_month_year(end)}), '
+                f'aktuelle Abfrage: {_format_month_year(query_time)}. Ob es seither eine '
+                f'Verlängerung oder Änderung gab, ist nicht bekannt.'
             ),
         )
 
