@@ -9,3 +9,4 @@
 # Für tcl/content_relation.py (Schritt 7a, echte LLM-Anbindung):
 # anthropic
 # pip install anthropic, plus ANTHROPIC_API_KEY als Umgebungsvariable
+psycopg[binary]
