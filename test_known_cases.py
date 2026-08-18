@@ -179,6 +179,19 @@ def main() -> None:
         "die Voraussetzung für die spätere state_relation-Einstufung ist."
     )
 
+    print("\n=== Bugfix-Regression: assertion_time fällt auf Start-Wochentag ===")
+    # Gefunden 18.08. beim Testen von tcl/temporal_expression.py: wenn
+    # assertion_time selbst ein Montag ist, lieferte "from monday
+    # through wednesday" vorher end < start (Mittwoch der Vorwoche
+    # statt derselben Woche). Test mit genau diesem Referenzdatum.
+    monday_ref = datetime(2026, 8, 17, 12, 0)  # ein Montag
+    g1 = normalize("from monday through wednesday", assertion_time=monday_ref)
+    check(
+        "Bugfix: from monday through wednesday, Referenz=Montag -> end nach start",
+        g1.start <= g1.end,
+        True,
+    )
+
     print("\nAlle Checks bestanden.")
 
 

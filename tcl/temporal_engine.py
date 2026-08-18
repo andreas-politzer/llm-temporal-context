@@ -81,14 +81,20 @@ def normalize(raw_temporal_expression: str, assertion_time: Optional[datetime]) 
     # UNABHÄNGIG von assertion_time (das ist genau der R-1-Befund)
     m = re.match(r"from (\w+) (?:through|to|until) (\w+)", text)
     if m:
-        # Referenzpunkt für die Wochentag-Auflösung: falls assertion_time
-        # fehlt, versuchen wir es trotzdem NICHT zu raten -> UNDETERMINED,
-        # außer beide Wochentage sind eindeutig genug (v0: hier bewusst
-        # konservativ, braucht assertion_time als grobe Woche-Referenz)
         if assertion_time is not None:
+            start_weekday = _WEEKDAYS.get(m.group(1).lower())
+            end_weekday = _WEEKDAYS.get(m.group(2).lower())
             start = _weekday_on_or_before(assertion_time, m.group(1))
-            end = _weekday_on_or_before(assertion_time, m.group(2))
-            if start is not None and end is not None:
+            # WICHTIG (Bug gefunden 18.08.): end NICHT unabhängig über
+            # _weekday_on_or_before(assertion_time, ...) berechnen - das
+            # kann bei bestimmten assertion_time-Wochentagen zu einem
+            # Intervall führen, dessen Ende VOR dem Start liegt (end
+            # landet in der Vorwoche, wenn assertion_time selbst auf
+            # den Start-Wochentag fällt). Stattdessen end relativ zum
+            # bereits gefundenen start berechnen - garantiert end >= start.
+            if start is not None and start_weekday is not None and end_weekday is not None:
+                days_forward = (end_weekday - start_weekday) % 7
+                end = start + timedelta(days=days_forward)
                 return TemporalInterval(start=start, end=end)
 
     # "<N> weeks/days ago" -> Punkt, relativ zu assertion_time
