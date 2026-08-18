@@ -11,25 +11,29 @@ decomposition_group_id: für v0 identisch mit turn_id (siehe Decision
 hier bewusst genutzt, um dem aufrufenden Modell keine eigene
 Gruppen-ID-Erzeugung aufzubürden).
 """
-
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Optional
+import sys
+from pathlib import Path
+
+# Bootstrap: mcp dev lädt diese Datei eigenständig, nicht als Teil des
+# tcl-Pakets - Projekt-Root muss selbst auf sys.path, damit absolute
+# Importe (tcl.xxx) funktionieren, unabhängig von der Lademethode.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server import MCPServer
 
-from .proposition import AssertionStatus, Proposition, TransitionType
-from .pipeline import process_new_proposition_with_judgments
-from .relation import SemanticCompatibility
-from .review import get_candidates_for_review as _get_candidates_for_review
-from .store import InMemoryStore
-from .temporal_engine import normalize
-from .query import resolve_current_state, format_answer
+from tcl.proposition import AssertionStatus, Proposition, TransitionType
+from tcl.pipeline import process_new_proposition_with_judgments
+from tcl.relation import SemanticCompatibility
+from tcl.review import get_candidates_for_review as _get_candidates_for_review
+from tcl.postgres_store import PostgresStore
+from tcl.temporal_engine import normalize
+from tcl.query import resolve_current_state, format_answer
 
 mcp = MCPServer("temporal-context-layer")
 
-_store = InMemoryStore()  # v0: Prozesslokal, kein Postgres-Wire-Up hier (siehe unten)
+_store = PostgresStore()  # 18.08.: von InMemoryStore umgehängt, siehe Contract
 
 
 @mcp.tool()
@@ -136,3 +140,6 @@ def query_current_state(conversation_id: str, proposition_ids: list[str], query_
         "resolved": result.resolved,
         "answer": format_answer(result),
     }
+
+if __name__ == "__main__":
+    mcp.run()
