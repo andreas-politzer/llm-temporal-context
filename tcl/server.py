@@ -96,9 +96,11 @@ def ingest_proposition(
       z.B. "seit X", "nicht mehr" oder "jetzt statt".
 
     raw_temporal_expression: einer der festen Vokabular-Werte aus dem
-    Temporal-Expression Contract ("aktuell", "since <weekday>",
-    "from <weekday> through <weekday>", "<N> days/weeks ago") oder
-    null, falls kein passender Ausdruck erkennbar war.
+    Temporal-Expression Contract v0 ("aktuell", "since <weekday>",
+    "from <weekday> through <weekday>", "<N> days/weeks ago", "until
+    <TT.MM.JJJJ>" — z.B. "until 30.06.2026" für ein konkretes
+    Ablauf-/Gültigkeitsdatum) oder null, falls kein passender Ausdruck
+    erkennbar war.
 
     Bei NOT_ASSERTED wird ohne Relationen gespeichert (Audit-Trail);
     judgments wird ignoriert.

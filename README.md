@@ -1,104 +1,164 @@
 # Temporal Context Layer
 
-> A model-agnostic temporal continuity layer for AI systems.
+> Three dimensions, not two.
 
-**Status: Work in Progress — Phase A (Architecture Validation)**
+Language models move through two dimensions by default: what is being said,
+and the order in which it was said. A third dimension — real, calendar time,
+independent of conversation order — is usually missing entirely. Two messages
+next to each other in a conversation can be five minutes or five months apart
+in the real world, and a model that only tracks conversational order cannot
+tell the difference.
 
-Temporal Context Layer explores how AI systems can maintain reliable temporal continuity across interactions, model instances, and periods of inactivity.
+This project adds that third dimension back.
 
-The core idea is simple:
+## What is Time Awareness?
 
-> **Temporal context should not live exclusively inside the model that happens to be answering right now.**
+**Time Awareness is the ability of a model to treat time as a continuous
+dimension of its context: understanding what has happened, what is true now,
+what has changed, what remains valid, what is approaching, and what can be
+expected or planned in relation to time.**
 
-Instead, temporal knowledge is extracted from conversations, checked for logical consistency by a deterministic engine, persisted independently of the language model, and queried when a later interaction needs to know what was previously true, what changed, and what remains uncertain.
+This is a larger goal than any single mechanism. Temporal memory, temporal
+validity, temporal continuity, projection, and planning are distinct
+capabilities that together contribute to time awareness.
 
-This repository contains the working implementation of that idea — not a demo, not a thought experiment. Every rule described below is backed by a test that currently passes.
+## What this layer does
+
+**A Temporal Context Layer gives language models an explicit representation
+of the passage of time and the temporal validity of information, so that
+information retrieved or remembered from the past is not automatically
+treated as current.**
+
+The layer is therefore infrastructure for time awareness, not time awareness
+itself. It provides explicit temporal context that a model can use when
+reasoning about past, present, and future.
+
+**Status: Work in progress, Phase A/B — architecture validated, core proven
+live against a real model and a real database, several components still open.**
 
 ---
 
-## Why Temporal Context?
+## Why this matters
 
-Language models have no sense of time passing. A model reads its context top to bottom, every single turn — it has no way to tell whether the last message in that context was written five minutes ago or five years ago. Nothing marks the passage of time; the text just sits there, equally "present" no matter how stale it actually is.
+Language models routinely work with information whose temporal status is
+implicit: something may have been true when it was written, may still be true
+now, may have changed since, or may only become relevant in the future.
 
-This produces a specific, recurring failure: a model confidently treats something as still valid long after it has expired. Ask about a certification, a contract, a deadline — "yes, that's fine, it's valid until June 2026" — without registering that the conversation is actually happening in August 2026, two months past that date. The information itself wasn't wrong. The model just had no way of knowing that time had moved on since it was true.
+Conversation order alone does not encode that distinction. A message can be
+the most recent thing in the context while referring to something that is
+already obsolete in the real world.
 
-That is the actual problem this project set out to solve — not clever language understanding, but basic temporal grounding: knowing *when* something was said relative to *now*, whether it's still current, and being honest about the difference between "this was true," "this is still true," and "I can no longer tell."
+The goal is therefore not clever date parsing. The goal is a persistent,
+model-independent temporal context layer that gives a model an explicit
+representation of the passage of time and the temporal validity of information,
+so that information retrieved or remembered from the past is not automatically
+treated as current.
 
-Solving that turns out to require more than tracking timestamps. The system needs to distinguish between genuinely different situations — a stated fact being superseded by a later one, two facts genuinely contradicting each other, a change being mentioned without knowing what it replaced, or simply not having enough information to say either way. A naive implementation collapses all of these into "the newest statement wins," which quietly produces exactly the kind of false confidence described above. That is precisely what this project avoids — deliberately, and at the cost of a much slower build process, because every shortcut we tried turned out to hide a real edge case.
+Temporal validity is one important part of that problem. Temporal memory,
+continuity, projection, and planning are related but distinct capabilities.
+This project deliberately treats them as separate building blocks rather than
+pretending that one mechanism solves "time awareness" as a whole.
 
-The goal is a persistent, model-independent temporal context layer that keeps a model honestly grounded in *when* it is and what has or hasn't expired since — one that knows the difference between what is known, what is inferred, and what remains unresolved.
+---
+
+## What "temporal awareness" actually breaks down into
+
+Not one problem. Several, mostly independent:
+
+- **Temporal Presence** — knowing what "now" is, without being told. *(Already works for Claude, via its own system context — verified live: asked "how long until Christmas" with no date mentioned anywhere in the conversation, and it answered correctly. Not guaranteed for every model/platform.)*
+- **Temporal Memory** — "when did we talk about X?" A pure timestamp lookup over conversation history, no interpretation needed. *(Not yet built — the raw data already exists in every stored turn, but nothing searches it yet.)*
+- **Temporal Validity** — "is this still true?" This is the core of what's built and proven: propositions with a known expiry are checked against the current query time, and the system says so honestly — never silently "still valid," never a guessed "no longer valid," always the known fact plus the acknowledged gap.
+- **Temporal Continuity** — how a state evolves: replaced, contradicted, or simply continued. Already implemented as the pairwise relation engine (`CONTINUES` / `SUPERSEDES` / `CONTRADICTS`).
+- **Temporal Projection** — "how long until X?" Follows naturally once Presence and Validity work; not a separate thing to build.
+- **Temporal Planning** — using time to decide what to do next. A model's own reasoning, downstream of good grounding — not something this layer should try to own.
+
+This layer is infrastructure for the middle of that list, mainly Validity and Continuity. It is not the whole of "time awareness" — being honest about that scope is part of the design, not a disclaimer.
 
 ---
 
 ## Architecture
 
-Nine pipeline steps, each with a clearly defined responsibility and an explicit negative responsibility (what it is not allowed to decide):
+Nine pipeline steps, each with an explicit responsibility and an explicit thing it is *not* allowed to decide:
 
-1. Proposition Extraction (LLM) — splits a turn into atomic statements
-2. Assertion Check (LLM) — ASSERTED/NOT_ASSERTED + transition_type
-3. Temporal Expression Extraction (LLM) — raw time expressions, fixed vocabulary
-4. Temporal Normalization (Engine) — deterministic, no LLM involved
-5. Candidate Retrieval (Store) — exhaustive by default, no premature filtering
-6. Relation Resolution (Engine) — pure interval arithmetic
-7. State Relation / Content Compatibility (LLM+Engine) — the only step that touches world knowledge
-8. Store — persists propositions and computed relations
-9. Query / Current-State — reads only, never re-evaluates
+1.  Proposition Extraction (LLM) — splits a turn into atomic statements
+2.  Assertion Check (LLM) — ASSERTED/NOT_ASSERTED + transition_type
+3.  Temporal Expression Extract (LLM) — raw time expressions, fixed vocabulary
+4.  Temporal Normalization (Engine) — deterministic, no LLM involved
+5.  Candidate Retrieval (Store) — exhaustive within a conversation, no premature filtering
+6.  Relation Resolution (Engine) — pure interval arithmetic
+7.  State Relation /
+    Content Compatibility (LLM+Engine)— the only step that touches world knowledge
+8.  Store — persists propositions, relations, full audit trail
+9.  Query / Current-State — reads only, checks validity against "now", never re-evaluates
 
-The full specification, including every rule and the reasoning behind it, lives in the Architecture Contract v0 document and its three companion contracts (Proposition Extraction, Assertion Check, Content Relation) — these are working documents kept outside this repository.
 
-### Design principles that shaped every decision here
+**A design principle that runs through every decision here:** the deterministic engine never sees content, and the LLM never does date arithmetic. Every relation is computed from real intervals — never from how close together two statements happened to be said. A contradiction fifteen minutes apart and one seven months apart are judged by the same rule, not by an implicit "recent things conflict" heuristic. That distinction alone took a full day to get right, because every shortcut we tried quietly broke something else.
 
-- No relation is inferred from timing alone. Two statements 15 minutes apart and two statements 7 months apart are treated identically at the storage level — a deliberate rejection of "default persistence" heuristics that turned out to break more cases than they fixed.
-- Exhaustive retrieval, not premature filtering. Every new proposition is compared against everything already stored. Slower, but guarantees recall — filtering is deferred until it's actually needed and can be validated against this baseline.
-- The deterministic engine never sees content; the LLM never does date arithmetic. A hard boundary, enforced in code, not just convention.
-- Ground truth by triangulation, not by decree. Every classification rule in this project was checked against independent, blind judgments from multiple models before being written into a prompt. Several rules exist only because two models initially disagreed, and the disagreement turned out to reveal a genuine, previously invisible edge case.
-- Pragmatism over purity, deliberately. Where a strict "no world knowledge" rule would have made the system nearly useless for ordinary language, the rule was changed — but only after the tension itself had been used to find a real bug.
+---
+
+## What is actually proven
+
+The core Temporal Context Layer has been exercised end-to-end with a real
+language model, a real MCP host, and a real PostgreSQL database.
+
+The system can persist temporally grounded propositions, maintain their
+relations, evaluate their temporal validity against a query time, detect
+knowledge that has become temporally unresolved, and expose that state through
+MCP to a model.
+
+A live model test also exposed an important limitation that our isolated tests
+had missed: the model could sometimes compensate for missing temporal
+functionality using its own reasoning. That distinction matters. A correct
+model answer is not evidence that the Temporal Context Layer itself performed
+the reasoning.
+
+The project's standard of proof is therefore deliberately stricter:
+deterministic temporal behaviour must first be demonstrated by the layer
+itself; model integration is then tested separately to verify that the model
+can actually use that information.
 
 ---
 
 ## What's implemented
 
-| Component | File | Status |
-|---|---|---|
-| Proposition / relation data model | tcl/proposition.py, tcl/relation.py | done |
-| Deterministic temporal engine | tcl/temporal_engine.py | done (one known edge-case bug, see below) |
-| Persistent store (in-memory, exhaustive retrieval) | tcl/store.py | done |
-| Pipeline orchestration (steps 5-8) | tcl/pipeline.py | done |
-| Current-state query resolution | tcl/query.py | done |
-| Content relation (LLM, step 7a) | tcl/content_relation.py | done, 31/31 regression corpus |
-| Proposition extraction (LLM, step 1) | tcl/extraction.py | done, 16/16 regression corpus |
-| Assertion check (LLM, step 2) | tcl/assertion_check.py | done, 7/7 regression corpus |
-| Temporal expression extraction (LLM, step 3) | tcl/temporal_expression.py | done, 6/6 regression corpus |
-| End-to-end wiring (steps 1 to 9 in one pass) | — | not yet built |
+| Component | Status |
+|---|---|
+| Proposition / relation data model, deterministic temporal engine | done |
+| Persistent store — `InMemoryStore` and `PostgresStore`, same protocol, both tested against the same contract | done |
+| Conversation/turn scoping, atomic ingestion, full audit trail (including rejected/hypothetical statements) | done |
+| Content relation, proposition extraction, assertion check, temporal expression extraction (LLM-backed) | done, each with its own regression corpus |
+| Lifecycle/decay — expiry detection against real query time, honest "expired, unknown since" responses | done, proven live |
+| MCP server — five tools, verified against a real MCP host (Inspector + Claude Desktop), verified against real Postgres | done |
 
-Every LLM-backed component was built the same way: define the contract and its boundaries first, construct minimal test pairs, get independent blind classifications from multiple models, resolve disagreements explicitly, then write the prompt, then validate against the corpus. No component skipped this order.
+## What's explicitly not done yet
 
-### Known open issue
-
-The weekday resolution helper in temporal_engine.py resolves weekday references backward-only. When the reference date itself falls on the interval's start weekday, this can produce a logically inverted interval (end before start) for "from X through Y" expressions. Pre-existing, not something the recent work introduced — flagged, not yet fixed.
+- **Temporal Memory** (Klasse A above) — searching conversation history by content for "when was X mentioned," without needing the heavier semantic pipeline at all.
+- **Message-level timestamping** — every turn currently gets a timestamp only when something is deliberately stored; there's no automatic per-message log yet, which is what would let the system answer "how long have we actually been working, net of breaks" without being told.
+- **Read/write tool permission structure and call-frequency policy** — right now nothing stops a model from calling these tools too eagerly; a normal conversation should mostly *not* touch the server at all, and that boundary isn't formally specified yet.
+- **Graduated expiry warnings** ("expires soon") — currently binary: expired or not.
+- **Cross-model reliability** — everything proven so far was proven with Claude. MCP support elsewhere is currently uneven (partial for OpenAI, weak for Gemini), which is a real, current constraint on the "model-agnostic" goal, not a solved problem.
 
 ---
 
-## Running the tests
+## Running it
 
-Deterministic and free:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install "psycopg[binary]" "mcp[cli]>=2.0,<3.0" anthropic
+export ANTHROPIC_API_KEY="your-key-here"
 
-    python test_known_cases.py
-    python test_pipeline.py
-    python test_query.py
-    python test_store_baseline.py
+docker run --name tcl-postgres -e POSTGRES_PASSWORD=devpassword \
+  -e POSTGRES_DB=temporal_context_layer -p 5432:5432 -d postgres:16
+docker exec -i tcl-postgres psql -U postgres -d temporal_context_layer < schema.sql
+```
 
-Call the Anthropic API, need `pip install anthropic` and an `ANTHROPIC_API_KEY` environment variable, cost a small amount per run:
+Deterministic tests (free, no API calls): `test_known_cases.py`, `test_store_contract.py`, `test_query_decay.py`, `test_certificate_decay.py`.
 
-    python test_content_relation_llm.py
-    python test_extraction.py
-    python test_assertion_check.py
-    python test_temporal_expression.py
+LLM-backed tests (small real API cost, a full pass is well under a dollar): `test_content_relation_llm.py`, `test_extraction.py`, `test_assertion_check.py`, `test_temporal_expression.py`, `test_ingest.py`, `test_mcp_server.py`.
+
+Run the MCP server directly, or inspect it interactively: `mcp dev tcl/server.py`.
 
 ---
 
-## What's next
-
-The Proposition Extraction pipeline (steps 1-3) is now complete and individually tested, alongside Content Relation (step 7a) and the deterministic core (steps 4-9) built earlier. The next milestone is wiring steps 1 through 4 into a single end-to-end pass, followed by the transition from Phase A (architecture validation) into Phase B: real persistent storage, conversation scoping, and robust handling of missing temporal information — the beginning of an actual usable layer rather than a validated architecture.
-
-This is not a finished product. It is a project that has, so far, refused every shortcut that looked easy — and gotten more reliable for it.
+This isn't a finished product, and more than once today it wasn't clear it was heading anywhere useful at all. What kept it honest was testing against a real model instead of trusting our own explanations of what we'd built — twice today, a live test found a real gap that every unit test had missed. That's the actual method here, not a footnote: build the smallest true thing, test it against reality, believe the result over the theory.
