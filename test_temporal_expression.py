@@ -46,11 +46,18 @@ def main() -> None:
                 print(f"[✗ FAIL] {name}: got=None (erwartete einen Ausdruck)")
             else:
                 interval = normalize(got_expr, assertion_time=REFERENCE_TIME)
-                ok = interval.start is not None or interval.end is not None
+                has_bound = interval.start is not None or interval.end is not None
+                # Wenn beide Grenzen bekannt sind, muss end >= start gelten -
+                # sonst wäre es ein logisch inkonsistentes Intervall (siehe
+                # der am 18.08. gefundene und behobene Wochentag-Bug).
+                logically_consistent = (
+                    interval.start is None or interval.end is None or interval.start <= interval.end
+                )
+                ok = has_bound and logically_consistent
                 print(
                     f"[{'✓' if ok else '✗'} {'OK' if ok else 'FAIL'}] {name}: "
                     f"raw={got_expr!r} -> normalize() ergab {interval} "
-                    f"({'erfolgreich geparst' if ok else 'NICHT erkannt von normalize()!'})"
+                    f"({'erfolgreich geparst' if ok else 'NICHT korrekt (fehlend oder end < start)!'})"
                 )
 
         if ok:
