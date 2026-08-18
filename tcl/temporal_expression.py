@@ -44,9 +44,8 @@ Deine Antwort für jede Proposition MUSS EXAKT eine der folgenden vier Formen se
 2. "since <wochentag>" — bei explizitem "seit <Wochentag>". "since" bleibt IMMER englisch, der Wochentag darf deutsch oder englisch sein.
 3. "from <wochentag> through <wochentag>" — bei einem festen Zeitraum zwischen zwei Wochentagen. "from"/"through" bleiben IMMER englisch.
 4. "<N> days ago" oder "<N> weeks ago" — bei "vor N Tagen/Wochen". "days"/"weeks"/"ago" bleiben IMMER englisch, nur die Zahl wird eingesetzt.
-5. "" (leerer String) — wenn der Zeitausdruck NICHT in eine der obigen drei Formen (2/3/4) passt (z.B. "im März", "letztes Jahr", ein Datum). Erfinde NICHTS, übersetze NICHT näherungsweise, gib NICHT den Original-Text zurück — gib exakt einen leeren String zurück.
-
-BEISPIELE, wie es NICHT aussehen darf:
+5. "until DD.MM.YYYY" — bei einem konkreten Ablauf-/Gültigkeitsdatum im Text (z.B. "gültig bis 30.06.2026", "läuft bis zum 30. Juni 2026"). "until" bleibt IMMER englisch, das Datum wird als DD.MM.YYYY eingesetzt (deutsche Reihenfolge Tag.Monat.Jahr), unabhängig davon, wie das Datum im Originaltext geschrieben war.
+6. "" (leerer String) — wenn der Zeitausdruck NICHT in eine der obigen vier Formen (2/3/4/5) passt (z.B. "im März", "letztes Jahr" ohne konkretes Datum)...
 - Proposition "Wir nutzen Jira." (kein Marker im Turn) → FALSCH: "Wir nutzen Jira." → RICHTIG: "aktuell"
 - Turn enthält "im März" → FALSCH: "im März" → RICHTIG: "" (leerer String, weil außerhalb des Vokabulars)
 

@@ -11,10 +11,11 @@ decomposition_group_id: für v0 identisch mit turn_id (siehe Decision
 hier bewusst genutzt, um dem aufrufenden Modell keine eigene
 Gruppen-ID-Erzeugung aufzubürden).
 """
-from datetime import datetime
-from typing import Optional
+
 import sys
 from pathlib import Path
+from datetime import datetime
+from typing import Optional
 
 # Bootstrap: mcp dev lädt diese Datei eigenständig, nicht als Teil des
 # tcl-Pakets - Projekt-Root muss selbst auf sys.path, damit absolute
@@ -72,50 +73,70 @@ def ingest_proposition(
     turn_id: str,
     conversation_id: str,
     proposition_text: str,
-    assertion_status: str,
-    transition_type: str,
+    assertion_status: AssertionStatus,
+    transition_type: TransitionType,
     raw_temporal_expression: Optional[str],
     assertion_time: str,
-    judgments: dict[str, str],
+    judgments: dict[str, SemanticCompatibility],
 ) -> dict:
     """
     Speichert EINE vom aufrufenden Modell bereits vollständig
-    klassifizierte Proposition. Bei assertion_status="NOT_ASSERTED":
-    wird ohne Relationen gespeichert (Audit-Trail), judgments wird
-    ignoriert. Bei "ASSERTED": judgments MUSS für jede proposition_id
-    aus einem vorherigen get_candidates_for_review-Aufruf einen Wert
-    ("COMPATIBLE"/"INCOMPATIBLE"/"UNDETERMINED") enthalten.
+    klassifizierte Proposition.
+
+    assertion_status:
+    - ASSERTED: Proposition wird als aktueller Fakt behauptet.
+    - NOT_ASSERTED: Proposition wird nicht als Fakt behauptet.
+
+    transition_type:
+    - BARE: keine Vorzustandsreferenz; Standard für eine erstmalige,
+      schlichte Behauptung.
+    - CONTINUATION: betont die Fortdauer eines bestehenden Zustands,
+      z.B. "weiterhin" oder "nach wie vor".
+    - TRANSITION: markiert einen Bruch mit einem vorherigen Zustand,
+      z.B. "seit X", "nicht mehr" oder "jetzt statt".
 
     raw_temporal_expression: einer der festen Vokabular-Werte aus dem
-    Temporal-Expression Contract v0 ("aktuell", "since <weekday>",
-    "from <weekday> through <weekday>", "<N> days/weeks ago") oder null,
-    falls kein passender Ausdruck erkennbar war.
+    Temporal-Expression Contract ("aktuell", "since <weekday>",
+    "from <weekday> through <weekday>", "<N> days/weeks ago") oder
+    null, falls kein passender Ausdruck erkennbar war.
 
-    Gibt eine Zusammenfassung der berechneten Relationen zurück (bei
-    ASSERTED) oder eine Bestätigung (bei NOT_ASSERTED).
+    Bei NOT_ASSERTED wird ohne Relationen gespeichert (Audit-Trail);
+    judgments wird ignoriert.
+
+    Bei ASSERTED muss judgments für jede proposition_id aus einem
+    vorherigen get_candidates_for_review-Aufruf einen Wert
+    ("COMPATIBLE"/"INCOMPATIBLE"/"UNDETERMINED") enthalten.
+
+    Gibt eine Zusammenfassung der berechneten Relationen zurück
+    (bei ASSERTED) oder eine Bestätigung (bei NOT_ASSERTED).
     """
-    status = AssertionStatus(assertion_status)
-    t_type = TransitionType(transition_type)
-    normalized = normalize(raw_temporal_expression, assertion_time=datetime.fromisoformat(assertion_time))
+    normalized = normalize(
+        raw_temporal_expression,
+        assertion_time=datetime.fromisoformat(assertion_time),
+    )
 
     proposition = Proposition(
         proposition_text=proposition_text,
-        assertion_status=status,
+        assertion_status=assertion_status,
         assertion_time=datetime.fromisoformat(assertion_time),
         raw_temporal_expression=raw_temporal_expression,
         normalized_temporal_reference=normalized,
-        transition_type=t_type,
+        transition_type=transition_type,
         decomposition_group_id=turn_id,
     )
 
-    if status == AssertionStatus.NOT_ASSERTED:
+    if assertion_status == AssertionStatus.NOT_ASSERTED:
         _store.ingest_propositions(turn_id, [proposition], [])
         return {"stored": True, "relations": []}
 
-    judgments_typed = {k: SemanticCompatibility(v) for k, v in judgments.items()}
     relations = process_new_proposition_with_judgments(
-        _store, conversation_id, turn_id, proposition, judgments_typed
+        _store,
+        conversation_id,
+        turn_id,
+        proposition,
+        judgments,
     )
+
     return {
         "stored": True,
         "relations": [

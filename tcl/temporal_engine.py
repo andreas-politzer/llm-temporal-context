@@ -106,6 +106,16 @@ def normalize(raw_temporal_expression: str, assertion_time: Optional[datetime]) 
         point = assertion_time - delta
         return TemporalInterval(start=point, end=point)
 
+        # "until DD.MM.YYYY" -> fest fixiertes Enddatum, kein Startdatum
+    # (Zertifikat-/Vertrags-Fall, gefunden 18.08. im echten Modelltest:
+    # Claude kaschierte die fehlende Funktionalität durch eigenes
+    # Weltwissen, statt dass der Layer selbst decay-fähig war)
+    m = re.match(r"until (\d{1,2})\.(\d{1,2})\.(\d{4})", text)
+    if m:
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        end = datetime(year, month, day)
+        return TemporalInterval(start=None, end=end)
+    
     return TemporalInterval(start=None, end=None)  # nicht erkannt -> UNDETERMINED
 
 

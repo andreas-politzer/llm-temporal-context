@@ -9,6 +9,9 @@ nötig, analog zu test_store_contract.py.
 
 from datetime import datetime
 
+from tcl.proposition import AssertionStatus, TransitionType
+from tcl.relation import SemanticCompatibility
+
 from tcl.server import (
     start_conversation,
     begin_turn,
@@ -36,7 +39,7 @@ def main() -> None:
     result1 = ingest_proposition(
         turn_id=turn1, conversation_id=conv,
         proposition_text="Der Vertrag mit Anbieter A läuft bis Juni 2026.",
-        assertion_status="ASSERTED", transition_type="BARE",
+        assertion_status=AssertionStatus.ASSERTED, transition_type=TransitionType.BARE,
         raw_temporal_expression=None,  # kein festes Vokabular-Muster hier, bewusst None
         assertion_time="2026-01-01T10:00:00", judgments={},
     )
@@ -50,12 +53,12 @@ def main() -> None:
     candidate_id = candidates2[0]["proposition_id"]
 
     # Simuliertes Modell-Urteil, wie es sonst das aufrufende Modell liefern würde
-    judgments = {candidate_id: "INCOMPATIBLE"}
+    judgments = {candidate_id: SemanticCompatibility.INCOMPATIBLE}
 
     result2 = ingest_proposition(
         turn_id=turn2, conversation_id=conv,
         proposition_text="Seit Mai arbeiten wir mit Anbieter C.",
-        assertion_status="ASSERTED", transition_type="TRANSITION",
+        assertion_status=AssertionStatus.ASSERTED, transition_type=TransitionType.TRANSITION,
         raw_temporal_expression="since monday",  # Näherung, nur damit normalize() etwas parsen kann
         assertion_time="2026-05-01T09:00:00", judgments=judgments,
     )
