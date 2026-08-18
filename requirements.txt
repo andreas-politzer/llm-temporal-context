@@ -10,3 +10,4 @@
 # anthropic
 # pip install anthropic, plus ANTHROPIC_API_KEY als Umgebungsvariable
 psycopg[binary]
+mcp[cli]>=2.0,<3.0

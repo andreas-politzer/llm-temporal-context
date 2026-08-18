@@ -88,3 +88,51 @@ def process_new_proposition(
 
     store.ingest_propositions(turn_id, [new_proposition], relations)
     return relations
+
+def process_new_proposition_with_judgments(
+    store: "StoreProtocol",
+    conversation_id: str,
+    turn_id: str,
+    new_proposition: Proposition,
+    candidate_judgments: dict,  # candidate_proposition_id -> SemanticCompatibility
+) -> list[PairwiseRelation]:
+    """
+    MCP-Variante von process_new_proposition (siehe MCP-Interface
+    Contract v0, 18.08.): content_relation kommt nicht von einer
+    aufgerufenen Funktion, sondern wurde bereits vom aufrufenden Modell
+    beurteilt und liegt hier als fertiges Dict vor (candidate_id ->
+    SemanticCompatibility). Sonst identische Logik zu
+    process_new_proposition.
+
+    Vorbedingung: candidate_judgments muss GENAU die candidate_ids
+    abdecken, die store.get_candidates() für diese conversation_id
+    aktuell liefert - keine Prüfung hier, Vertrauen in den Aufrufer
+    (siehe offene Concurrency-Einschränkung im Contract).
+    """
+    candidates = store.get_candidates(conversation_id, new_proposition)
+
+    relations: list[PairwiseRelation] = []
+    for candidate in candidates:
+        content_relation = candidate_judgments[candidate.proposition_id]
+        temporal_relation = compare_intervals(
+            candidate.normalized_temporal_reference,
+            new_proposition.normalized_temporal_reference,
+        )
+        state_relation = resolve_state_relation(
+            temporal_relation,
+            content_relation,
+            transition_type_a=candidate.transition_type,
+            transition_type_b=new_proposition.transition_type,
+        )
+        relations.append(
+            PairwiseRelation(
+                proposition_a_id=candidate.proposition_id,
+                proposition_b_id=new_proposition.proposition_id,
+                temporal_relation=temporal_relation,
+                content_relation=content_relation,
+                state_relation=state_relation,
+            )
+        )
+
+    store.ingest_propositions(turn_id, [new_proposition], relations)
+    return relations
