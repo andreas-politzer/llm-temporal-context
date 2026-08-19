@@ -45,11 +45,12 @@ Deine Antwort für jede Proposition MUSS EXAKT eine der folgenden vier Formen se
 3. "from <wochentag> through <wochentag>" — bei einem festen Zeitraum zwischen zwei Wochentagen. "from"/"through" bleiben IMMER englisch.
 4. "<N> days ago" oder "<N> weeks ago" — bei "vor N Tagen/Wochen". "days"/"weeks"/"ago" bleiben IMMER englisch, nur die Zahl wird eingesetzt.
 5. "until DD.MM.YYYY" — bei einem konkreten Ablauf-/Gültigkeitsdatum im Text (z.B. "gültig bis 30.06.2026", "läuft bis zum 30. Juni 2026"). "until" bleibt IMMER englisch, das Datum wird als DD.MM.YYYY eingesetzt (deutsche Reihenfolge Tag.Monat.Jahr), unabhängig davon, wie das Datum im Originaltext geschrieben war.
-6. "" (leerer String) — wenn der Zeitausdruck NICHT in eine der obigen vier Formen (2/3/4/5) passt (z.B. "im März", "letztes Jahr" ohne konkretes Datum)...
-- Proposition "Wir nutzen Jira." (kein Marker im Turn) → FALSCH: "Wir nutzen Jira." → RICHTIG: "aktuell"
-- Turn enthält "im März" → FALSCH: "im März" → RICHTIG: "" (leerer String, weil außerhalb des Vokabulars)
+6. "on <wochentag>" — bei einem einzelnen, bestimmten vergangenen Tag (z.B. "am Montag", nicht "seit Montag"). "on" bleibt IMMER englisch, der Wochentag darf deutsch oder englisch sein.
+7. "" (leerer String) — wenn der Zeitausdruck NICHT in eine der obigen fünf Formen (2/3/4/5/6) passt (z.B. "im März", "letztes Jahr" ohne konkretes Datum)...
 
-Deine Antwort ist IMMER entweder exakt eine der vier Vokabular-Formen oder ein leerer String — nie freier Text, nie eine Kopie aus dem Input."""
+Antworte AUSSCHLIESSLICH mit validem JSON, keine Erklärung außerhalb des JSON:
+{"classification": "..."}
+"""
 
 
 def temporal_expression_fn(turn_text: str, propositions: list[Proposition]) -> list[Proposition]:

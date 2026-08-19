@@ -44,13 +44,15 @@ def start_conversation() -> str:
 
 
 @mcp.tool()
-def begin_turn(conversation_id: str, turn_text: str, assertion_time: str) -> str:
+def begin_turn(conversation_id: str, turn_text: str) -> str:
     """
-    Persistiert einen neuen Turn (IMMER, Audit-Trail-Prinzip).
-    assertion_time als ISO-8601-String (z.B. "2026-08-18T14:00:00").
-    Gibt die turn_id zurück - wird für die folgenden Tool-Aufrufe gebraucht.
+    Persistiert einen neuen Turn (IMMER, Audit-Trail-Prinzip). Der
+    Zeitpunkt wird NICHT vom aufrufenden Modell übergeben, sondern
+    server-seitig aus der echten Systemzeit gesetzt (autoritative
+    Quelle, 19.08. — verhindert erfundene Uhrzeiten wie Mitternacht).
+    Gibt die turn_id zurück.
     """
-    return _store.add_turn(conversation_id, turn_text, datetime.fromisoformat(assertion_time))
+    return _store.add_turn(conversation_id, turn_text)
 
 
 @mcp.tool()
@@ -76,7 +78,6 @@ def ingest_proposition(
     assertion_status: AssertionStatus,
     transition_type: TransitionType,
     raw_temporal_expression: Optional[str],
-    assertion_time: str,
     judgments: dict[str, SemanticCompatibility],
 ) -> dict:
     """
@@ -98,8 +99,8 @@ def ingest_proposition(
     raw_temporal_expression: einer der festen Vokabular-Werte aus dem
     Temporal-Expression Contract v0 ("aktuell", "since <weekday>",
     "from <weekday> through <weekday>", "<N> days/weeks ago", "until
-    <TT.MM.JJJJ>" — z.B. "until 30.06.2026" für ein konkretes
-    Ablauf-/Gültigkeitsdatum) oder null, falls kein passender Ausdruck
+    <TT.MM.JJJJ>", "on <weekday>" — z.B. "on monday" für einen einzelnen,
+    bestimmten vergangenen Tag) oder null, falls kein passender Ausdruck
     erkennbar war.
 
     Bei NOT_ASSERTED wird ohne Relationen gespeichert (Audit-Trail);
@@ -112,15 +113,12 @@ def ingest_proposition(
     Gibt eine Zusammenfassung der berechneten Relationen zurück
     (bei ASSERTED) oder eine Bestätigung (bei NOT_ASSERTED).
     """
-    normalized = normalize(
-        raw_temporal_expression,
-        assertion_time=datetime.fromisoformat(assertion_time),
-    )
-
+    assertion_time = _store.get_turn_assertion_time(turn_id)
+    normalized = normalize(raw_temporal_expression, assertion_time=assertion_time)
     proposition = Proposition(
         proposition_text=proposition_text,
         assertion_status=assertion_status,
-        assertion_time=datetime.fromisoformat(assertion_time),
+        assertion_time=assertion_time,
         raw_temporal_expression=raw_temporal_expression,
         normalized_temporal_reference=normalized,
         transition_type=transition_type,
@@ -163,6 +161,42 @@ def query_current_state(conversation_id: str, proposition_ids: list[str], query_
         "resolved": result.resolved,
         "answer": format_answer(result),
     }
+
+@mcp.tool()
+def search_temporal_memory(conversation_id: str, search_term: str) -> list[dict]:
+    """
+    Temporal Memory: "Wann haben wir über X gesprochen?" Reine
+    Textsuche über bereits gespeicherte Turns dieser Conversation,
+    KEIN LLM-Aufruf, findet nur wörtlich vorkommende Begriffe (mit
+    einfacher Wortform-Erkennung), keine Paraphrasen. Gibt eine Liste
+    von Treffern zurück, jeweils mit Turn-Text und Zeitpunkt, sortiert
+    von früh nach spät.
+    """
+    return _store.search_turns(conversation_id, search_term)
+
+@mcp.tool()
+def get_event_time(turn_id: str) -> list[dict]:
+    """
+    Ergänzung zu search_temporal_memory: liefert für einen gefundenen
+    Turn die dazugehörigen Propositionen MIT aufgelöstem, absolutem
+    Ereignisdatum (normalized_temporal_reference) — z.B. "am Montag"
+    wird hier zu "2026-08-17", nicht mehr relativ.
+
+    WICHTIG für die Antwortformulierung: Nenne dem Nutzer das absolute
+    Ereignisdatum aus diesem Tool, NICHT die relative Formulierung aus
+    dem rohen Turn-Text von search_temporal_memory — eine relative
+    Angabe wie "am Montag" wird mit der Zeit mehrdeutig, ein absolutes
+    Datum bleibt es nicht.
+    """
+    props = _store.get_propositions_for_turn(turn_id)
+    return [
+        {
+            "proposition_text": p.proposition_text,
+            "event_start": p.normalized_temporal_reference.start.isoformat() if p.normalized_temporal_reference and p.normalized_temporal_reference.start else None,
+            "event_end": p.normalized_temporal_reference.end.isoformat() if p.normalized_temporal_reference and p.normalized_temporal_reference.end else None,
+        }
+        for p in props
+    ]
 
 if __name__ == "__main__":
     mcp.run()

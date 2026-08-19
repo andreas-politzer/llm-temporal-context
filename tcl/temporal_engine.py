@@ -77,6 +77,13 @@ def normalize(raw_temporal_expression: str, assertion_time: Optional[datetime]) 
         if start is not None:
             return TemporalInterval(start=start, end=None)
 
+    # "on <weekday>" -> Punkt an einem bestimmten, vergangenen Wochentag
+    m = re.match(r"on (\w+)", text)
+    if m and assertion_time is not None:
+        day = _weekday_on_or_before(assertion_time, m.group(1))
+        if day is not None:
+            return TemporalInterval(start=day, end=day)
+
     # "from <weekday> through <weekday>" -> fest fixiertes Intervall,
     # UNABHÄNGIG von assertion_time (das ist genau der R-1-Befund)
     m = re.match(r"from (\w+) (?:through|to|until) (\w+)", text)

@@ -63,7 +63,7 @@ pretending that one mechanism solves "time awareness" as a whole.
 Not one problem. Several, mostly independent:
 
 - **Temporal Presence** — knowing what "now" is, without being told. *(Already works for Claude, via its own system context — verified live: asked "how long until Christmas" with no date mentioned anywhere in the conversation, and it answered correctly. Not guaranteed for every model/platform.)*
-- **Temporal Memory** — "when did we talk about X?" A pure timestamp lookup over conversation history, no interpretation needed. *(Not yet built — the raw data already exists in every stored turn, but nothing searches it yet.)*
+- **Temporal Memory** — "when did we talk about X?" A pure timestamp lookup over conversation history, no interpretation needed. Distinguishes mention-time (when it was said) from event-time (when the referenced thing actually happened) — "on Monday we discussed X" resolves to an absolute date, not a relative one that becomes ambiguous weeks later. *(Proven live and regression-tested.)* Deliberately notebook-like: nothing is captured unless explicitly stored — there is no automatic background logging yet.
 - **Temporal Validity** — "is this still true?" This is the core of what's built and proven: propositions with a known expiry are checked against the current query time, and the system says so honestly — never silently "still valid," never a guessed "no longer valid," always the known fact plus the acknowledged gap.
 - **Temporal Continuity** — how a state evolves: replaced, contradicted, or simply continued. Already implemented as the pairwise relation engine (`CONTINUES` / `SUPERSEDES` / `CONTRADICTS`).
 - **Temporal Projection** — "how long until X?" Follows naturally once Presence and Validity work; not a separate thing to build.
@@ -126,11 +126,13 @@ can actually use that information.
 | Content relation, proposition extraction, assertion check, temporal expression extraction (LLM-backed) | done, each with its own regression corpus |
 | Lifecycle/decay — expiry detection against real query time, honest "expired, unknown since" responses | done, proven live |
 | MCP server — five tools, verified against a real MCP host (Inspector + Claude Desktop), verified against real Postgres | done |
+| Temporal Memory — mention-time and event-time lookup over stored turns | done, regression-tested |
 
 ## What's explicitly not done yet
 
 - **Temporal Memory** (Klasse A above) — searching conversation history by content for "when was X mentioned," without needing the heavier semantic pipeline at all.
-- **Message-level timestamping** — every turn currently gets a timestamp only when something is deliberately stored; there's no automatic per-message log yet, which is what would let the system answer "how long have we actually been working, net of breaks" without being told.
+- **Message-level timestamping** — turns now get a server-authoritative timestamp when explicitly stored, avoiding fabricated precision (a model asserting "midnight" because it only knows the date, not the time) — but there's still no automatic per-message log, which is what would let the system answer "how long have we actually been working, net of breaks" without being told.
+- **True ambient capture** — MCP tools only fire when a model actively decides to call them. There is no way for this server to automatically log every message without the model choosing to invoke a tool each time. Real invisible capture would need to happen at the host platform level, outside this codebase — a real, current boundary, not a bug to fix here.
 - **Read/write tool permission structure and call-frequency policy** — right now nothing stops a model from calling these tools too eagerly; a normal conversation should mostly *not* touch the server at all, and that boundary isn't formally specified yet.
 - **Graduated expiry warnings** ("expires soon") — currently binary: expired or not.
 - **Cross-model reliability** — everything proven so far was proven with Claude. MCP support elsewhere is currently uneven (partial for OpenAI, weak for Gemini), which is a real, current constraint on the "model-agnostic" goal, not a solved problem.

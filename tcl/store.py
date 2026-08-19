@@ -34,11 +34,18 @@ class InMemoryStore:
         self._propositions_by_conversation[conv.id] = []
         return conv.id
 
-    def add_turn(self, conversation_id: str, text: str, assertion_time: datetime) -> str:
+    def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
+        if assertion_time is None:
+            assertion_time = datetime.now()
         turn = Turn(conversation_id=conversation_id, text=text, assertion_time=assertion_time)
         self._turns[turn.id] = turn
         self._conversation_by_turn[turn.id] = conversation_id
         return turn.id
+
+    def get_turn_assertion_time(self, turn_id: str) -> datetime:
+        if turn_id not in self._turns:
+            raise ValueError(f"turn_id {turn_id!r} existiert nicht")
+        return self._turns[turn_id].assertion_time
 
     def ingest_propositions(
         self,
@@ -73,6 +80,18 @@ class InMemoryStore:
             if {r.proposition_a_id, r.proposition_b_id} == {id_a, id_b}:
                 return r
         return None
+
+    def search_turns(self, conversation_id: str, search_term: str) -> list:
+        term_lower = search_term.lower()
+        results = []
+        for turn in self._turns.values():
+            if turn.conversation_id == conversation_id and term_lower in turn.text.lower():
+                results.append({"turn_text": turn.text, "assertion_time": turn.assertion_time})
+        results.sort(key=lambda r: r["assertion_time"])
+        return results
+
+    def get_propositions_for_turn(self, turn_id: str) -> list:
+        return [p for p in self._propositions.values() if p.turn_id == turn_id]
 
     def __len__(self) -> int:
         return len(self._propositions)

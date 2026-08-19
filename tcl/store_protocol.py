@@ -21,11 +21,13 @@ class StoreProtocol(Protocol):
         """Erzeugt eine neue Conversation, gibt ihre id zurück."""
         ...
 
-    def add_turn(self, conversation_id: str, text: str, assertion_time: datetime) -> str:
+    def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
         """
-        Persistiert einen Turn IMMER, unabhängig vom späteren Ergebnis
-        der Assertion Check (Audit-Trail-Prinzip). Gibt die turn_id
-        zurück.
+        Persistiert einen Turn IMMER (Audit-Trail-Prinzip). Falls
+        assertion_time nicht übergeben wird, setzt die Implementierung
+        die echte Server-Systemzeit (autoritative Quelle, 19.08.,
+        siehe Message-Level-Timestamping-Contract) — niemals eine
+        künstliche Uhrzeit wie Mitternacht erfinden.
         """
         ...
 
@@ -54,6 +56,15 @@ class StoreProtocol(Protocol):
 
     def get_relation_between(self, id_a: str, id_b: str) -> Optional[PairwiseRelation]:
         ...
+
+    def search_turns(self, conversation_id: str, search_term: str) -> list:
+        """
+        Reine Textsuche über turns.text (Temporal Memory, Roadmap v2
+        Punkt 1). Kein LLM, keine Interpretation — findet nur
+        tatsächlich vorkommende Wörter/Wortformen, keine Paraphrasen.
+        Gibt Liste von {"turn_text": str, "assertion_time": datetime} zurück.
+        """
+        ...
     
     def get_all_propositions(self, conversation_id: str) -> list[Proposition]:
         """
@@ -61,5 +72,19 @@ class StoreProtocol(Protocol):
         assertion_status — für Audit-Trail-Prüfungen (siehe Decision
         2026-08-18). Anders als get_candidates() nicht auf ASSERTED
         gefiltert.
+        """
+        ...
+
+    def get_turn_assertion_time(self, turn_id: str) -> datetime:
+        """Für ingest_proposition: Zeitquelle ist der Turn, nicht das Modell."""
+        ...
+
+    def get_propositions_for_turn(self, turn_id: str) -> list:
+        """
+        Alle Propositionen, die aus einem bestimmten Turn extrahiert
+        wurden — Brücke zwischen Temporal Memory (Turn-Ebene, Mention-
+        Zeit) und der Proposition-Pipeline (Event-Zeit über
+        normalized_temporal_reference). Kein LLM, reine Verknüpfung
+        über turn_id.
         """
         ...

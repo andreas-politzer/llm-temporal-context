@@ -16,6 +16,7 @@ CREATE TABLE turns (
     inserted_at TIMESTAMP NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_turns_conversation ON turns(conversation_id);
+CREATE INDEX idx_turns_text_search ON turns USING gin(to_tsvector('simple', text));
 
 CREATE TABLE propositions (
     id UUID PRIMARY KEY,

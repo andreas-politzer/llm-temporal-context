@@ -37,7 +37,9 @@ class PostgresStore:
             row = conn.execute("INSERT INTO conversations DEFAULT VALUES RETURNING id").fetchone()
             return str(row["id"])
 
-    def add_turn(self, conversation_id: str, text: str, assertion_time: datetime) -> str:
+    def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
+        if assertion_time is None:
+            assertion_time = datetime.now()
         with self._connect() as conn:
             row = conn.execute(
                 "INSERT INTO turns (conversation_id, text, assertion_time) VALUES (%s, %s, %s) RETURNING id",
@@ -45,12 +47,25 @@ class PostgresStore:
             ).fetchone()
             return str(row["id"])
 
+    def get_turn_assertion_time(self, turn_id: str) -> datetime:
+        with self._connect() as conn:
+            row = conn.execute("SELECT assertion_time FROM turns WHERE id = %s", (turn_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"turn_id {turn_id!r} existiert nicht in der Datenbank")
+            return row["assertion_time"]
+
     def ingest_propositions(
         self, turn_id: str, propositions: list[Proposition], relations: list[PairwiseRelation]
     ) -> None:
         with self._connect() as conn:
             with conn.transaction():
                 turn_row = conn.execute("SELECT conversation_id FROM turns WHERE id = %s", (turn_id,)).fetchone()
+                if turn_row is None:
+                    raise ValueError(
+                        f"turn_id {turn_id!r} existiert nicht in der Datenbank — "
+                        f"möglicherweise eine veraltete ID aus einer früheren Session "
+                        f"oder einem gelöschten/zurückgesetzten Datenbankstand."
+                    )
                 conversation_id = turn_row["conversation_id"]
 
                 for p in propositions:
@@ -137,6 +152,24 @@ class PostgresStore:
             turn_id=str(row["turn_id"]) if row.get("turn_id") else None,
             proposition_id=str(row["id"]),
         )
+
+    def search_turns(self, conversation_id: str, search_term: str) -> list:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT text, assertion_time FROM turns
+                WHERE conversation_id = %s
+                AND to_tsvector('simple', text) @@ to_tsquery('simple', %s)
+                ORDER BY assertion_time
+                """,
+                (conversation_id, search_term),
+            ).fetchall()
+            return [{"turn_text": row["text"], "assertion_time": row["assertion_time"]} for row in rows]
+
+    def get_propositions_for_turn(self, turn_id: str) -> list:
+        with self._connect() as conn:
+            rows = conn.execute(_PROPOSITION_SELECT + " WHERE p.turn_id = %s", (turn_id,)).fetchall()
+            return [self._row_to_proposition(row) for row in rows]
 
     def __len__(self) -> int:
         with self._connect() as conn:
