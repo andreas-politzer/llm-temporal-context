@@ -48,9 +48,9 @@ def begin_turn(conversation_id: str, turn_text: str) -> str:
     """
     Persistiert einen neuen Turn (IMMER, Audit-Trail-Prinzip). Der
     Zeitpunkt wird NICHT vom aufrufenden Modell übergeben, sondern
-    server-seitig aus der echten Systemzeit gesetzt (autoritative
-    Quelle, 19.08. — verhindert erfundene Uhrzeiten wie Mitternacht).
-    Gibt die turn_id zurück.
+    server-seitig aus der tatsächlichen Uhrzeit des Servers zum
+    Zeitpunkt dieses Aufrufs gesetzt — verhindert erfundene Uhrzeiten
+    wie eine pauschale Mitternacht. Gibt die turn_id zurück.
     """
     return _store.add_turn(conversation_id, turn_text)
 
@@ -163,16 +163,20 @@ def query_current_state(conversation_id: str, proposition_ids: list[str], query_
     }
 
 @mcp.tool()
-def search_temporal_memory(conversation_id: str, search_term: str) -> list[dict]:
+@mcp.tool()
+def search_temporal_memory(search_term: str) -> list[dict]:
     """
-    Temporal Memory: "Wann haben wir über X gesprochen?" Reine
-    Textsuche über bereits gespeicherte Turns dieser Conversation,
-    KEIN LLM-Aufruf, findet nur wörtlich vorkommende Begriffe (mit
-    einfacher Wortform-Erkennung), keine Paraphrasen. Gibt eine Liste
-    von Treffern zurück, jeweils mit Turn-Text und Zeitpunkt, sortiert
-    von früh nach spät.
+    Temporal Memory: "Wann haben wir über X gesprochen?" Sucht über
+    ALLE bisherigen Conversations hinweg (workspace-weit, nicht nur
+    die aktuelle Conversation), kein LLM-Aufruf. Jeder Treffer trägt
+    time_source: "EVENT" (tatsächliches Ereignisdatum, aufgelöst aus
+    einer gespeicherten Proposition) oder "MENTION" (nur der Zeitpunkt
+    der Erwähnung ist bekannt, kein aufgelöstes Ereignisdatum). Nenne
+    dem Nutzer IMMER, welche Art von Zeitangabe du gerade nennst -
+    verwechsle nie MENTION mit EVENT. TCL liefert nur die Rohdaten;
+    Muster, Häufigkeiten und Formulierungen sind deine Aufgabe.
     """
-    return _store.search_turns(conversation_id, search_term)
+    return _store.search_temporal_memory(search_term)
 
 @mcp.tool()
 def get_event_time(turn_id: str) -> list[dict]:

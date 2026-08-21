@@ -11,6 +11,7 @@ löst das O(n²)-Skalierungsproblem strukturell.
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
 from typing import Optional
 from uuid import uuid4
 
@@ -24,14 +25,23 @@ class InMemoryStore:
         self._turns: dict[str, Turn] = {}
         self._propositions: dict[str, Proposition] = {}
         self._relations: list[PairwiseRelation] = []
-        # Hilfsindex: welche proposition_ids gehören zu welcher conversation_id
         self._propositions_by_conversation: dict[str, list[str]] = {}
         self._conversation_by_turn: dict[str, str] = {}
+        self._workspace_by_conversation: dict[str, str] = {}
+        self._default_workspace_id: Optional[str] = None
 
-    def add_conversation(self) -> str:
+    def _get_default_workspace(self) -> str:
+        if self._default_workspace_id is None:
+            self._default_workspace_id = str(uuid4())
+        return self._default_workspace_id
+
+    def add_conversation(self, workspace_id: Optional[str] = None) -> str:
+        if workspace_id is None:
+            workspace_id = self._get_default_workspace()
         conv = Conversation()
         self._conversations[conv.id] = conv
         self._propositions_by_conversation[conv.id] = []
+        self._workspace_by_conversation[conv.id] = workspace_id
         return conv.id
 
     def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
@@ -92,6 +102,45 @@ class InMemoryStore:
 
     def get_propositions_for_turn(self, turn_id: str) -> list:
         return [p for p in self._propositions.values() if p.turn_id == turn_id]
+
+    def search_temporal_memory(self, search_term: str, workspace_id: Optional[str] = None) -> list:
+        if workspace_id is None:
+            workspace_id = self._get_default_workspace()
+        term_lower = search_term.lower()
+        results = []
+
+        conv_ids_in_workspace = [
+            cid for cid, wid in self._workspace_by_conversation.items() if wid == workspace_id
+        ]
+
+        for turn in self._turns.values():
+            if turn.conversation_id not in conv_ids_in_workspace:
+                continue
+
+            matching_props = [
+                p for p in self._propositions.values()
+                if p.turn_id == turn.id and p.normalized_temporal_reference and p.normalized_temporal_reference.start
+                and term_lower in p.proposition_text.lower()
+            ]
+            if matching_props:
+                for p in matching_props:
+                    results.append({
+                        "text": p.proposition_text,
+                        "time": p.normalized_temporal_reference.start,
+                        "time_source": "EVENT",
+                        "conversation_id": turn.conversation_id,
+                    })
+            elif term_lower in turn.text.lower():
+                time_value = turn.assertion_time
+                results.append({
+                    "text": turn.text,
+                    "time": time_value,
+                    "time_source": "MENTION" if time_value is not None else "UNKNOWN",
+                    "conversation_id": turn.conversation_id,
+                })
+
+        results.sort(key=lambda r: r["time"] or datetime.min)
+        return results
 
     def __len__(self) -> int:
         return len(self._propositions)

@@ -17,8 +17,13 @@ from .relation import PairwiseRelation
 
 
 class StoreProtocol(Protocol):
-    def add_conversation(self) -> str:
-        """Erzeugt eine neue Conversation, gibt ihre id zurück."""
+    def add_conversation(self, workspace_id: Optional[str] = None) -> str:
+        """
+        Erzeugt eine neue Conversation. Ohne workspace_id wird
+        automatisch der feste Default-Workspace verwendet (Multi-User
+        bewusst ausgeschlossen, ein Default genügt für den aktuellen
+        Anwendungsfall).
+        """
         ...
 
     def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
@@ -86,5 +91,16 @@ class StoreProtocol(Protocol):
         Zeit) und der Proposition-Pipeline (Event-Zeit über
         normalized_temporal_reference). Kein LLM, reine Verknüpfung
         über turn_id.
+        """
+        ...
+
+    def search_temporal_memory(self, search_term: str, workspace_id: Optional[str] = None) -> list:
+        """
+        Workspace-gescoped, NICHT conversation-gescoped (siehe Workspace-
+        Scope Contract v0). Jeder Treffer trägt explizit time_source:
+        "EVENT" (aufgelöstes Ereignisdatum aus einer Proposition),
+        "MENTION" (nur Turn-Zeit bekannt), "UNKNOWN" (keine belastbare
+        Zeit vorhanden - defensiver Fallback, praktisch unerreichbar).
+        Kein LLM. Keine Cluster-/Musterbildung - reine, sortierte Liste.
         """
         ...

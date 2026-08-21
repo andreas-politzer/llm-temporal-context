@@ -3,10 +3,17 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE conversations (
+CREATE TABLE workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP NOT NULL DEFAULT now()
 );
+
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID NOT NULL REFERENCES workspaces(id),
+    created_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_conversations_workspace ON conversations(workspace_id);
 
 CREATE TABLE turns (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -32,9 +32,17 @@ class PostgresStore:
     def _connect(self) -> psycopg.Connection:
         return psycopg.connect(self._dsn, row_factory=dict_row)
 
-    def add_conversation(self) -> str:
+    def add_conversation(self, workspace_id: Optional[str] = None) -> str:
         with self._connect() as conn:
-            row = conn.execute("INSERT INTO conversations DEFAULT VALUES RETURNING id").fetchone()
+            if workspace_id is None:
+                row = conn.execute("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetchone()
+                if row is None:
+                    row = conn.execute("INSERT INTO workspaces DEFAULT VALUES RETURNING id").fetchone()
+                workspace_id = str(row["id"])
+            row = conn.execute(
+                "INSERT INTO conversations (workspace_id) VALUES (%s) RETURNING id",
+                (workspace_id,),
+            ).fetchone()
             return str(row["id"])
 
     def add_turn(self, conversation_id: str, text: str, assertion_time: Optional[datetime] = None) -> str:
@@ -170,6 +178,49 @@ class PostgresStore:
         with self._connect() as conn:
             rows = conn.execute(_PROPOSITION_SELECT + " WHERE p.turn_id = %s", (turn_id,)).fetchall()
             return [self._row_to_proposition(row) for row in rows]
+
+    def search_temporal_memory(self, search_term: str, workspace_id: Optional[str] = None) -> list:
+        with self._connect() as conn:
+            if workspace_id is None:
+                row = conn.execute("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetchone()
+                if row is None:
+                    return []
+                workspace_id = str(row["id"])
+
+            rows = conn.execute(
+                """
+                SELECT p.proposition_text AS text, p.normalized_start AS time,
+                       'EVENT' AS time_source, t.conversation_id AS conversation_id
+                FROM propositions p
+                JOIN turns t ON p.turn_id = t.id
+                JOIN conversations c ON t.conversation_id = c.id
+                WHERE c.workspace_id = %s AND p.normalized_start IS NOT NULL
+                  AND to_tsvector('simple', p.proposition_text) @@ to_tsquery('simple', %s)
+
+                UNION ALL
+
+                SELECT t.text AS text, t.assertion_time AS time,
+                       'MENTION' AS time_source, t.conversation_id AS conversation_id
+                FROM turns t
+                JOIN conversations c ON t.conversation_id = c.id
+                WHERE c.workspace_id = %s
+                  AND to_tsvector('simple', t.text) @@ to_tsquery('simple', %s)
+                  AND t.id NOT IN (
+                      SELECT p2.turn_id FROM propositions p2 WHERE p2.normalized_start IS NOT NULL
+                  )
+                ORDER BY time
+                """,
+                (workspace_id, search_term, workspace_id, search_term),
+            ).fetchall()
+            return [
+                {
+                    "text": r["text"],
+                    "time": r["time"],
+                    "time_source": r["time_source"] if r["time"] is not None else "UNKNOWN",
+                    "conversation_id": str(r["conversation_id"]),
+                }
+                for r in rows
+            ]
 
     def __len__(self) -> int:
         with self._connect() as conn:
