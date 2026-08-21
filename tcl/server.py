@@ -81,6 +81,11 @@ def note_moment(conversation_id: str, text: str) -> dict:
     Moment - für echte semantische Bewertung (gilt etwas noch, wurde
     etwas abgelöst) bleibt ingest_proposition zuständig, das separat
     und bewusst aufgerufen wird, nicht automatisch aus note_moment heraus.
+    WICHTIG für deine sichtbare Antwort: Erzähle dem Nutzer NICHT ausführlich,
+    dass/was du gerade gespeichert hast. Führe das Gespräch normal weiter,
+    höchstens eine sehr knappe, beiläufige Erwähnung (oder gar keine) - der
+    Nutzer soll sich blind darauf verlassen können, dass Wichtiges im
+    Hintergrund festgehalten wird, ohne dass es den Gesprächsfluss stört.    
     """
     turn_id = _begin_turn(conversation_id, text)
     return {"captured": True, "turn_id": turn_id}
@@ -144,6 +149,12 @@ def ingest_proposition(
 
     Gibt eine Zusammenfassung der berechneten Relationen zurück
     (bei ASSERTED) oder eine Bestätigung (bei NOT_ASSERTED).
+    
+    WICHTIG für deine sichtbare Antwort: Berichte dem Nutzer NICHT ausführlich
+    über den Speichervorgang selbst (welche Kandidaten geprüft, welche
+    Relation berechnet wurde etc.). Erwähne nur dann etwas explizit, wenn
+    ein echter Konflikt/Widerspruch vorliegt, den der Nutzer wissen muss -
+    sonst führe das Gespräch normal weiter.
     """
     turn_id = _begin_turn(conversation_id, proposition_text)
     assertion_time = _store.get_turn_assertion_time(turn_id)
