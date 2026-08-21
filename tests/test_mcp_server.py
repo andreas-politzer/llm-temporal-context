@@ -14,7 +14,7 @@ from tcl.relation import SemanticCompatibility
 
 from tcl.server import (
     start_conversation,
-    begin_turn,
+    note_moment,
     get_candidates_for_review,
     ingest_proposition,
     query_current_state,
@@ -31,23 +31,22 @@ def check(name: str, got, expected) -> None:
 def main() -> None:
     print("=== MCP-Fluss: erste Proposition, kein Kandidat, direkt speichern ===")
     conv = start_conversation()
-    turn1 = begin_turn(conv, "Der Vertrag mit Anbieter A läuft bis Juni 2026.", "2026-01-01T10:00:00")
-
+    
     candidates1 = get_candidates_for_review(conv, "Der Vertrag mit Anbieter A läuft bis Juni 2026.")
     check("Erste Proposition: keine Kandidaten (Store ist leer)", candidates1, [])
 
     result1 = ingest_proposition(
-        turn_id=turn1, conversation_id=conv,
+        conversation_id=conv,
         proposition_text="Der Vertrag mit Anbieter A läuft bis Juni 2026.",
-        assertion_status=AssertionStatus.ASSERTED, transition_type=TransitionType.BARE,
-        raw_temporal_expression=None,  # kein festes Vokabular-Muster hier, bewusst None
-        assertion_time="2026-01-01T10:00:00", judgments={},
+        assertion_status=AssertionStatus.ASSERTED,
+        transition_type=TransitionType.BARE,
+        raw_temporal_expression=None,
+        judgments={},
     )
     check("Erste Proposition: gespeichert, keine Relationen", result1, {"stored": True, "relations": []})
 
     print("\n=== MCP-Fluss: zweite Proposition, ein Kandidat, Modell-Urteil simuliert ===")
-    turn2 = begin_turn(conv, "Seit Mai arbeiten wir mit Anbieter C.", "2026-05-01T09:00:00")
-
+    
     candidates2 = get_candidates_for_review(conv, "Seit Mai arbeiten wir mit Anbieter C.")
     check("Zweite Proposition: genau 1 Kandidat gefunden", len(candidates2), 1)
     candidate_id = candidates2[0]["proposition_id"]
@@ -56,11 +55,12 @@ def main() -> None:
     judgments = {candidate_id: SemanticCompatibility.INCOMPATIBLE}
 
     result2 = ingest_proposition(
-        turn_id=turn2, conversation_id=conv,
+        conversation_id=conv,
         proposition_text="Seit Mai arbeiten wir mit Anbieter C.",
-        assertion_status=AssertionStatus.ASSERTED, transition_type=TransitionType.TRANSITION,
-        raw_temporal_expression="since monday",  # Näherung, nur damit normalize() etwas parsen kann
-        assertion_time="2026-05-01T09:00:00", judgments=judgments,
+        assertion_status=AssertionStatus.ASSERTED,
+        transition_type=TransitionType.TRANSITION,
+        raw_temporal_expression="since monday",
+        judgments=judgments,
     )
     check("Zweite Proposition: 1 Relation berechnet", len(result2["relations"]), 1)
     check("Zweite Proposition: state_relation ist SUPERSEDES", result2["relations"][0]["state_relation"], "SUPERSEDES")

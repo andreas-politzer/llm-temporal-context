@@ -44,15 +44,46 @@ def start_conversation() -> str:
 
 
 @mcp.tool()
-def begin_turn(conversation_id: str, turn_text: str) -> str:
+def _begin_turn(conversation_id: str, turn_text: str) -> str:
     """
-    Persistiert einen neuen Turn (IMMER, Audit-Trail-Prinzip). Der
-    Zeitpunkt wird NICHT vom aufrufenden Modell übergeben, sondern
-    server-seitig aus der tatsächlichen Uhrzeit des Servers zum
-    Zeitpunkt dieses Aufrufs gesetzt — verhindert erfundene Uhrzeiten
-    wie eine pauschale Mitternacht. Gibt die turn_id zurück.
+    INTERN, kein öffentliches MCP-Tool mehr (Contract 21.08.: begin_turn
+    verschwindet als Modell-Schnittstelle, um die Zuverlässigkeitslücke
+    "Modell vergisst den separaten Aufruf" strukturell auszuschließen).
+    Wird von note_moment und ingest_proposition intern aufgerufen, nie
+    direkt vom Modell.
     """
     return _store.add_turn(conversation_id, turn_text)
+
+@mcp.tool()
+def note_moment(conversation_id: str, text: str) -> dict:
+    """
+    Leichtgewichtiger Capture — SCHNELL, kein LLM, keine Extraction,
+    keine Relation-Berechnung. Nur Text + echter Server-Zeitstempel
+    werden gespeichert (Audit-Trail-Prinzip). Legt intern selbst einen
+    Turn an, kein separater begin_turn-Aufruf nötig.
+
+    WICHTIG - RUFE DIESES TOOL SELBSTSTÄNDIG AUF, ohne dass der Nutzer
+    explizit "merk dir das" sagt, wenn die Unterhaltung einen
+    dauerhaft relevanten temporalen Anker enthält. Orientiere dich an
+    dieser Relevanz-Einschätzung:
+
+    SEHR HOCH: eine Entscheidung ("wir machen es künftig so..."), ein
+    dauerhafter Zustand ("X läuft jetzt über Y"), echter Projektfortschritt.
+    HOCH: ein konkreter Plan/Vorhaben, ein zeitliches Ereignis ("gestern
+    haben wir X entschieden"), eine explizite Präferenz des Nutzers.
+    MITTEL: ein wiederkehrendes Thema über mehrere Nachrichten, eine
+    längere Diskussion über eine Entscheidung.
+    NIEDRIG/IGNORIEREN: bloße Nachrichtenlänge ohne Entscheidung,
+    einmalige Alltagsfragen ohne dauerhaften Bezug (z.B. Restaurant-Tipps).
+
+    Rufe dieses Tool NICHT bei jeder Nachricht auf - nur bei echtem
+    Verdacht auf dauerhafte Relevanz. Dies speichert NUR den rohen
+    Moment - für echte semantische Bewertung (gilt etwas noch, wurde
+    etwas abgelöst) bleibt ingest_proposition zuständig, das separat
+    und bewusst aufgerufen wird, nicht automatisch aus note_moment heraus.
+    """
+    turn_id = _begin_turn(conversation_id, text)
+    return {"captured": True, "turn_id": turn_id}
 
 
 @mcp.tool()
@@ -72,7 +103,6 @@ def get_candidates_for_review(conversation_id: str, proposition_text: str) -> li
 
 @mcp.tool()
 def ingest_proposition(
-    turn_id: str,
     conversation_id: str,
     proposition_text: str,
     assertion_status: AssertionStatus,
@@ -82,7 +112,9 @@ def ingest_proposition(
 ) -> dict:
     """
     Speichert EINE vom aufrufenden Modell bereits vollständig
-    klassifizierte Proposition.
+    klassifizierte Proposition. Der Turn wird intern automatisch
+    angelegt (kein separater begin_turn-Aufruf nötig, kein turn_id-
+    Parameter mehr, Contract 21.08.).
 
     assertion_status:
     - ASSERTED: Proposition wird als aktueller Fakt behauptet.
@@ -113,6 +145,7 @@ def ingest_proposition(
     Gibt eine Zusammenfassung der berechneten Relationen zurück
     (bei ASSERTED) oder eine Bestätigung (bei NOT_ASSERTED).
     """
+    turn_id = _begin_turn(conversation_id, proposition_text)
     assertion_time = _store.get_turn_assertion_time(turn_id)
     normalized = normalize(raw_temporal_expression, assertion_time=assertion_time)
     proposition = Proposition(
