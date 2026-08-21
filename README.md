@@ -1,5 +1,3 @@
-Stimmt. Hier ist sie jetzt — kompakt, auf Basis der bisherigen README, aktualisiert um die tatsächlich bewiesenen Änderungen und ohne die offenen Forschungsfragen künstlich aufzublasen.
-
 # Temporal Context Layer
 > Three dimensions, not two.
 Language models operate primarily in conversational order: what was said,
