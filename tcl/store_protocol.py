@@ -104,3 +104,13 @@ class StoreProtocol(Protocol):
         Kein LLM. Keine Cluster-/Musterbildung - reine, sortierte Liste.
         """
         ...
+
+    def get_recent_events(self, limit: int = 5, workspace_id: Optional[str] = None) -> list:
+        """
+        Für get_temporal_context_frame: die letzten N Propositionen im
+        Workspace, sortiert nach Zeit (event_time bevorzugt, sonst
+        mention_time) - reines Recency-Kriterium, KEINE Relevanz-
+        Filterung (bewusst, siehe Temporal-Context-Frame Contract v0 -
+        Mechanismus zuerst testen, Filter später).
+        """
+        ...

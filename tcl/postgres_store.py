@@ -222,6 +222,44 @@ class PostgresStore:
                 for r in rows
             ]
 
+    def get_recent_events(self, limit: int = 5, workspace_id: Optional[str] = None) -> list:
+        with self._connect() as conn:
+            if workspace_id is None:
+                row = conn.execute("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetchone()
+                if row is None:
+                    return []
+                workspace_id = str(row["id"])
+
+            rows = conn.execute(
+                """
+                SELECT p.proposition_text AS text, p.normalized_start AS time,
+                       'EVENT' AS time_source
+                FROM propositions p
+                JOIN turns t ON p.turn_id = t.id
+                JOIN conversations c ON t.conversation_id = c.id
+                WHERE c.workspace_id = %s AND p.normalized_start IS NOT NULL
+
+                UNION ALL
+
+                SELECT t.text AS text, t.assertion_time AS time,
+                       'MENTION' AS time_source
+                FROM turns t
+                JOIN conversations c ON t.conversation_id = c.id
+                WHERE c.workspace_id = %s
+                  AND t.id NOT IN (
+                      SELECT p2.turn_id FROM propositions p2 WHERE p2.normalized_start IS NOT NULL
+                  )
+
+                ORDER BY time DESC
+                LIMIT %s
+                """,
+                (workspace_id, workspace_id, limit),
+            ).fetchall()
+            return [
+                {"text": r["text"], "time": r["time"], "time_source": r["time_source"]}
+                for r in rows
+            ]
+
     def __len__(self) -> int:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) AS n FROM propositions").fetchone()["n"]

@@ -246,5 +246,40 @@ def get_event_time(turn_id: str) -> list[dict]:
         for p in props
     ]
 
+@mcp.tool()
+def get_temporal_context_frame() -> dict:
+    """
+    Liefert einen kompakten zeitlichen Kontext-Rahmen: aktuelle
+    Serverzeit + die letzten paar zeitlich relevanten Ereignisse
+    (workspace-weit, über alle Conversations hinweg). RUFE DIESES TOOL
+    AUTONOM ZU BEGINN EINES NEUEN GESPRÄCHS AUF, wenn die Projekt-
+    anweisung das vorsieht - nicht bei jeder einzelnen Nachricht.
+
+    "recent_events" ist NACH RECENCY sortiert, NICHT nach inhaltlicher
+    Relevanz (bewusste Vereinfachung, siehe Contract). "upcoming" ist
+    aktuell IMMER leer - das System kann noch keine zukünftigen/
+    bevorstehenden Ereignisse erkennen (bekannte, akzeptierte Lücke,
+    kein Fehler).
+
+    Formuliere aus diesen Rohdaten selbst einen natürlichen Satz
+    ("wir haben zuletzt am... X Tage her") - dieses Tool liefert nur
+    Fakten, keine fertige Formulierung.
+    """
+    current_time = datetime.now()
+    events = _store.get_recent_events(limit=5)
+    return {
+        "current_time": current_time.isoformat(),
+        "recent_events": [
+            {
+                "text": e["text"],
+                "time": e["time"].isoformat() if e["time"] else None,
+                "time_source": e["time_source"],
+                "elapsed_days": (current_time - e["time"]).days if e["time"] else None,
+            }
+            for e in events
+        ],
+        "upcoming": [],
+    }
+
 if __name__ == "__main__":
     mcp.run()

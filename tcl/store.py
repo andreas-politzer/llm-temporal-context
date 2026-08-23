@@ -142,5 +142,39 @@ class InMemoryStore:
         results.sort(key=lambda r: r["time"] or datetime.min)
         return results
 
+    def get_recent_events(self, limit: int = 5, workspace_id: Optional[str] = None) -> list:
+        if workspace_id is None:
+            workspace_id = self._get_default_workspace()
+
+        conv_ids_in_workspace = [
+            cid for cid, wid in self._workspace_by_conversation.items() if wid == workspace_id
+        ]
+
+        events = []
+        for turn in self._turns.values():
+            if turn.conversation_id not in conv_ids_in_workspace:
+                continue
+
+            matching_props = [
+                p for p in self._propositions.values()
+                if p.turn_id == turn.id and p.normalized_temporal_reference and p.normalized_temporal_reference.start
+            ]
+            if matching_props:
+                for p in matching_props:
+                    events.append({
+                        "text": p.proposition_text,
+                        "time": p.normalized_temporal_reference.start,
+                        "time_source": "EVENT",
+                    })
+            elif turn.assertion_time is not None:
+                events.append({
+                    "text": turn.text,
+                    "time": turn.assertion_time,
+                    "time_source": "MENTION",
+                })
+
+        events.sort(key=lambda e: e["time"], reverse=True)
+        return events[:limit]
+
     def __len__(self) -> int:
         return len(self._propositions)
