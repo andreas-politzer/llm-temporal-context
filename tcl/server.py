@@ -32,6 +32,9 @@ from tcl.postgres_store import PostgresStore
 from tcl.temporal_engine import normalize
 from tcl.query import resolve_current_state, format_answer
 
+from .query import classify_moment
+from .temporal_engine import TemporalInterval
+
 mcp = MCPServer("temporal-context-layer")
 
 _store = PostgresStore()  # 18.08.: von InMemoryStore umgehängt, siehe Contract
@@ -256,10 +259,21 @@ def get_temporal_context_frame() -> dict:
     anweisung das vorsieht - nicht bei jeder einzelnen Nachricht.
 
     "recent_events" ist NACH RECENCY sortiert, NICHT nach inhaltlicher
-    Relevanz (bewusste Vereinfachung, siehe Contract). "upcoming" ist
-    aktuell IMMER leer - das System kann noch keine zukünftigen/
-    bevorstehenden Ereignisse erkennen (bekannte, akzeptierte Lücke,
-    kein Fehler).
+    Relevanz (bewusste Vereinfachung, siehe Contract).
+
+    Jedes Ereignis in "recent_events" trägt zusätzlich "moment_status":
+    "due" bedeutet, das Ereignis-Datum ist HEUTE erreicht - das ist der
+    wichtigste Wert, auf den du achten solltest, wenn du prüfst, ob
+    etwas gerade fällig geworden ist. "past" heißt, das Datum liegt
+    bereits zurück. "upcoming" heißt, es liegt noch in der Zukunft.
+    "unknown" heißt, kein auswertbares Datum vorhanden.
+
+    Das separate Top-Level-Feld "upcoming" (nicht Teil von
+    recent_events) ist aktuell IMMER eine leere Liste - eine eigene,
+    gefilterte Liste NUR zukünftiger Ereignisse existiert noch nicht
+    als eigenständige Funktion (bekannte, akzeptierte Lücke, kein
+    Fehler). Nutze stattdessen den moment_status je Ereignis in
+    recent_events, um Bevorstehendes zu erkennen.
 
     Formuliere aus diesen Rohdaten selbst einen natürlichen Satz
     ("wir haben zuletzt am... X Tage her") - dieses Tool liefert nur
@@ -275,6 +289,10 @@ def get_temporal_context_frame() -> dict:
                 "time": e["time"].isoformat() if e["time"] else None,
                 "time_source": e["time_source"],
                 "elapsed_days": (current_time - e["time"]).days if e["time"] else None,
+                "moment_status": classify_moment(
+                    TemporalInterval(start=e["time"], end=e["time"]) if e["time"] else None,
+                    current_time,
+                ),
             }
             for e in events
         ],

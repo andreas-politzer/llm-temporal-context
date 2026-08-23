@@ -53,6 +53,12 @@ def main() -> None:
     check("Neuestes Ereignis zuerst", events[0]["text"], "Heute: workspace_id Bugfix diskutiert.")
     check("Fünftneuestes Ereignis zuletzt in der Liste", events[4]["text"], "Vor 4 Tagen: Message-Level Timestamping gefixt.")
     check("Alle time_source == EVENT (alle hatten raw_temporal_expression)", all(e["time_source"] == "EVENT" for e in events), True)
+    print("\n=== moment_status wird korrekt mitgeliefert (nicht nur get_recent_events, auch übers Tool) ===")
+    from tcl.server import get_temporal_context_frame, _store as server_store
+    frame = get_temporal_context_frame()
+    check("Frame enthält recent_events", len(frame["recent_events"]) > 0, True)
+    check("Jedes Event hat moment_status", all("moment_status" in e for e in frame["recent_events"]), True)
+    check("moment_status ist einer der gültigen Werte", all(e["moment_status"] in ("upcoming", "due", "past", "unknown") for e in frame["recent_events"]), True)
 
     print("\nAlle Checks bestanden.")
 
