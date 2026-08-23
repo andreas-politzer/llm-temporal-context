@@ -203,3 +203,25 @@ def format_answer(result: QueryResult) -> str:
     if result.reason:
         parts.append(result.reason)
     return " ".join(parts)
+
+def classify_moment(interval, query_time: datetime) -> str:
+    """
+    Beantwortet eine andere Frage als resolve_current_state: nicht
+    "was gilt unter mehreren Propositionen", sondern "wie verhält
+    sich EIN Zeitpunkt zu JETZT". Grundlage für Projection/upcoming
+    (Temporal-Context-Frame Contract v0, 23.08.).
+
+    Gibt zurück: "upcoming" | "due" | "past" | "unknown".
+    """
+    if interval is None or interval.start is None:
+        return "unknown"
+
+    event_date = interval.start.date()
+    query_date = query_time.date()
+
+    if event_date > query_date:
+        return "upcoming"
+    elif event_date == query_date:
+        return "due"
+    else:
+        return "past"

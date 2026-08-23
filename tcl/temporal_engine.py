@@ -122,7 +122,18 @@ def normalize(raw_temporal_expression: str, assertion_time: Optional[datetime]) 
         day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
         end = datetime(year, month, day)
         return TemporalInterval(start=None, end=end)
-    
+
+    # "on <TT.MM.JJJJ>" -> Punkt an einem absoluten, eindeutigen Datum,
+    # Vergangenheit ODER Zukunft. Anders als "on <weekday>" (das immer
+    # rückwärts sucht) gibt es hier keine Mehrdeutigkeit - ein
+    # konkretes Kalenderdatum ist immer eindeutig. Gefunden 23.08.,
+    # gebraucht für Projection/upcoming-Tests.
+    m = re.match(r"on (\d{1,2})\.(\d{1,2})\.(\d{4})", text)
+    if m:
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        point = datetime(year, month, day)
+        return TemporalInterval(start=point, end=point)
+
     return TemporalInterval(start=None, end=None)  # nicht erkannt -> UNDETERMINED
 
 
